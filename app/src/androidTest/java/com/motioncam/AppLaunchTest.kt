@@ -37,12 +37,9 @@ class AppLaunchTest {
         }
 
         // Default keep-screen mode is OFF, which shows an all-black "asleep"
-        // overlay (burn-in protection). Tap the centre to wake so the controls
-        // are visible and interactive, matching how a user would use it.
-        val inst = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
-        val device = androidx.test.uiautomator.UiDevice.getInstance(inst)
-        device.click(device.displayWidth / 2, device.displayHeight / 2)
-        composeRule.waitForIdle()
+        // overlay (burn-in protection) that intercepts taps. Deterministically
+        // dismiss it (tap to wake) before interacting with the controls.
+        dismissSleepOverlay()
 
         composeRule.onNodeWithText("Settings").assertIsDisplayed()
         composeRule.onNodeWithText("Uploads").assertIsDisplayed()
@@ -69,6 +66,22 @@ class AppLaunchTest {
         }
         composeRule.waitForIdle()
         captureScreenshot("3_settings_screen")
+    }
+
+    /** Taps the centre of the screen until the black "asleep" overlay is gone,
+     *  so subsequent control taps land on the actual buttons. */
+    private fun dismissSleepOverlay() {
+        val inst = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+        val device = androidx.test.uiautomator.UiDevice.getInstance(inst)
+        repeat(10) {
+            val present = composeRule
+                .onAllNodes(androidx.compose.ui.test.hasTestTag("sleep_overlay"))
+                .fetchSemanticsNodes().isNotEmpty()
+            if (!present) return
+            device.click(device.displayWidth / 2, device.displayHeight / 2)
+            composeRule.waitForIdle()
+            Thread.sleep(300)
+        }
     }
 
     /** Best-effort UI screenshot for evidence; never fails the test. Written to
