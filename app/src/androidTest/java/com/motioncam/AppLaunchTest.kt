@@ -49,25 +49,26 @@ class AppLaunchTest {
 
         captureScreenshot("1_main_screen")
 
-        // Navigate to Settings (wait on the "Save" button — a plain Text node).
-        composeRule.onNodeWithText("Settings").performClick()
-        composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithTextContains("Save").fetchSemanticsNodes().isNotEmpty()
-        }
-        composeRule.waitForIdle()
-        captureScreenshot("2_settings_screen")
-        composeRule.onNodeWithText("Cancel").performClick()
-
-        // Back on the main screen, navigate to Uploads.
-        composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithTextContains("Uploads").fetchSemanticsNodes().isNotEmpty()
-        }
+        // Visit Uploads first — its "Back" button is at the top (always on screen),
+        // so returning to the main screen is reliable.
         composeRule.onNodeWithText("Uploads").performClick()
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithTextContains("Queue").fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.waitForIdle()
-        captureScreenshot("3_uploads_screen")
+        captureScreenshot("2_uploads_screen")
+        composeRule.onNodeWithText("Back").performClick()
+
+        // Back on main, open Settings and capture it last (no return needed).
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.onAllNodesWithTextContains("Settings").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("Settings").performClick()
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.onAllNodesWithTextContains("FTP upload").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitForIdle()
+        captureScreenshot("3_settings_screen")
     }
 
     /** Best-effort UI screenshot for evidence; never fails the test. Written to

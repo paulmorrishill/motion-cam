@@ -91,7 +91,7 @@ jobs:
           disable-animations: true
           # Single line on purpose: the emulator-runner executes each script LINE
           # as a separate shell, which would drop $rc and mask test failures.
-          script: 'set +e; ./gradlew connectedDebugAndroidTest --console=plain; rc=$?; mkdir -p screenshots; for f in 1_main_screen 2_settings_screen 3_uploads_screen; do adb exec-out run-as com.motioncam cat files/$f.png > "screenshots/$f.png" 2>/dev/null || true; done; ls -la screenshots || true; exit $rc'
+          script: 'set +e; ./gradlew connectedDebugAndroidTest --console=plain; rc=$?; mkdir -p screenshots; for f in 1_main_screen 2_uploads_screen 3_settings_screen; do adb exec-out run-as com.motioncam cat files/$f.png > "screenshots/$f.png" 2>/dev/null || true; done; ls -la screenshots || true; exit $rc'
 
       - name: Upload UI screenshot
         if: always()
