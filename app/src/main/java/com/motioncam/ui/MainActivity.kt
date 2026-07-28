@@ -65,7 +65,17 @@ class MainActivity : ComponentActivity() {
         } else {
             permissionLauncher.launch(requiredPermissions())
         }
-        requestIgnoreBatteryOptimizations()
+        // Auto-request battery-optimisation exemption in real use, but not under
+        // instrumentation (the system screen would cover the app and break UI tests).
+        if (!isRunningUnderTest()) requestIgnoreBatteryOptimizations()
+    }
+
+    /** True when an instrumentation test runner is on the classpath (androidTest only). */
+    private fun isRunningUnderTest(): Boolean = try {
+        Class.forName("androidx.test.espresso.Espresso")
+        true
+    } catch (e: ClassNotFoundException) {
+        false
     }
 
     override fun onStart() {
