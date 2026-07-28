@@ -75,8 +75,12 @@ class AppLaunchTest {
     private fun captureScreenshot(name: String) {
         try {
             val inst = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+            val bmp = inst.uiAutomation.takeScreenshot() ?: return
             val file = java.io.File(inst.targetContext.filesDir, "$name.png")
-            androidx.test.uiautomator.UiDevice.getInstance(inst).takeScreenshot(file)
+            java.io.FileOutputStream(file).use { out ->
+                bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+            }
+            bmp.recycle()
         } catch (e: Exception) {
             // ignore — screenshot is diagnostic only
         }

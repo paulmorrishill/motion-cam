@@ -46,12 +46,24 @@ fun MotionCamRoot(serviceProvider: () -> CameraService?, activity: MainActivity)
     val service = serviceProvider()
     var screen by remember { mutableStateOf(Screen.MAIN) }
 
+    // Keep-screen state lives at the root so it survives navigating to Settings/
+    // Uploads and back (otherwise the user's screen choice would reset each time).
+    var keepMode by remember { mutableStateOf(KeepScreenMode.OFF) }
+    var lastWake by remember { mutableLongStateOf(System.currentTimeMillis()) }
+
     when (screen) {
         Screen.SETTINGS -> SettingsScreen(activity = activity, onBack = { screen = Screen.MAIN })
         Screen.UPLOADS -> UploadsScreen(ui = ui, onBack = { screen = Screen.MAIN })
         Screen.MAIN -> MainScreen(
             service = service,
             activity = activity,
+            keepMode = keepMode,
+            lastWake = lastWake,
+            setKeepMode = {
+                keepMode = it
+                AppState.update { s -> s.copy(keepScreenMode = it) }
+            },
+            setLastWake = { lastWake = it },
             onOpenSettings = { screen = Screen.SETTINGS },
             onOpenUploads = { screen = Screen.UPLOADS }
         )
@@ -62,13 +74,15 @@ fun MotionCamRoot(serviceProvider: () -> CameraService?, activity: MainActivity)
 private fun MainScreen(
     service: CameraService?,
     activity: MainActivity,
+    keepMode: KeepScreenMode,
+    lastWake: Long,
+    setKeepMode: (KeepScreenMode) -> Unit,
+    setLastWake: (Long) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenUploads: () -> Unit
 ) {
     val ui by AppState.state.collectAsState()
 
-    var keepMode by remember { mutableStateOf(KeepScreenMode.OFF) }
-    var lastWake by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
     // Keep the phone awake in every mode so it never locks; darkness is handled
@@ -83,7 +97,7 @@ private fun MainScreen(
 
     // Wake the display whenever motion begins.
     LaunchedEffect(ui.motionActive) {
-        if (ui.motionActive) lastWake = System.currentTimeMillis()
+        if (ui.motionActive) setLastWake(System.currentTimeMillis())
     }
 
     val dark = when (keepMode) {
@@ -149,11 +163,7 @@ private fun MainScreen(
             ControlButton(
                 label = "Screen: ${keepMode.short()}",
                 active = keepMode != KeepScreenMode.OFF,
-                onClick = {
-                    keepMode = keepMode.next()
-                    lastWake = System.currentTimeMillis()
-                    AppState.update { it.copy(keepScreenMode = keepMode) }
-                }
+                onClick = { setKeepMode(keepMode.next()) }
             )
             if (ui.recorderState == RecorderStateMachine.State.DISARMED) {
                 ControlButton(label = "Re-arm", active = false, onClick = { service?.rearm() })
@@ -171,8 +181,8 @@ private fun MainScreen(
                     .fillMaxSize()
                     .background(Color.Black)
                     .clickable {
-                        lastWake = System.currentTimeMillis()
-                        if (keepMode == KeepScreenMode.OFF) keepMode = KeepScreenMode.TIMED
+                        setLastWake(System.currentTimeMillis())
+                        if (keepMode == KeepScreenMode.OFF) setKeepMode(KeepScreenMode.TIMED)
                     },
                 contentAlignment = Alignment.TopStart
             ) {
