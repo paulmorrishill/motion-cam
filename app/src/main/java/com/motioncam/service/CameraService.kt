@@ -223,9 +223,28 @@ class CameraService : Service(), CameraController.Callbacks {
 
     // ---- CameraController.Callbacks ----
 
+    override fun onActiveRecordingFile(file: File) {
+        // Track the file currently being written (updated on rollover too) so the
+        // uploader never uploads/deletes the in-progress segment.
+        AppState.update { it.copy(currentFileName = file.name) }
+    }
+
     override fun onRecordingFileCompleted(file: File) {
         // Finished (either rollover or stop) -> queue for upload + run retention.
         uploads.trigger()
+    }
+
+    override fun onRecordingInterrupted() {
+        // Recorder ended unexpectedly (max size reached without rollover).
+        analysis.execute {
+            stateMachine.forceArm()
+            AppState.update {
+                it.copy(currentFileName = null, recorderState = stateMachine.state)
+            }
+        }
+        beeper.recordingStopped()
+        uploads.trigger()
+        updateNotification()
     }
 
     override fun nextRecordingFile(): File = makeRecordingFile()

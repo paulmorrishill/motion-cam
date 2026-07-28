@@ -33,8 +33,14 @@ class CameraController(private val context: Context) {
         /** Delivered on every analysis frame: a COPY of the luma (Y) plane. */
         fun onMotionLuma(luma: ByteArray, width: Int, height: Int, rowStride: Int)
 
-        /** A recording file finished (either on stop or a size rollover). */
+        /** The file that is now actively being written (recording start or rollover). */
+        fun onActiveRecordingFile(file: File)
+
+        /** A recording file finished and is complete (rollover or stop). */
         fun onRecordingFileCompleted(file: File)
+
+        /** Recording ended unexpectedly (e.g. max size reached without a rollover). */
+        fun onRecordingInterrupted()
 
         /** Provides a fresh timestamped file for the next segment on rollover. */
         fun nextRecordingFile(): File
@@ -55,6 +61,8 @@ class CameraController(private val context: Context) {
     private var previewSurface: Surface? = null
 
     private var recording = false
+    private var recorderStarted = false
+    private var pendingRecorderStart = false
     private var currentFile: File? = null
     private var pendingNextFile: File? = null
 
@@ -201,6 +209,17 @@ class CameraController(private val context: Context) {
             override fun onConfigured(configured: CameraCaptureSession) {
                 session = configured
                 startRepeating()
+                // Start the recorder only once the session (incl. recorder surface)
+                // is actually configured, so no leading frames are lost.
+                if (recording && pendingRecorderStart) {
+                    pendingRecorderStart = false
+                    try {
+                        recorder?.start()
+                        recorderStarted = true
+                    } catch (e: Exception) {
+                        callbacks?.onError("recorder.start: ${e.message}")
+                    }
+                }
             }
 
             override fun onConfigureFailed(configured: CameraCaptureSession) {
@@ -296,9 +315,30 @@ class CameraController(private val context: Context) {
             builder.set(CaptureRequest.FLASH_MODE,
                 if (torchOn) CaptureRequest.FLASH_MODE_TORCH else CaptureRequest.FLASH_MODE_OFF)
             builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_START)
-            // One-shot trigger, then resume the steady repeating request.
-            sess.capture(builder.build(), null, cameraHandler)
-            startRepeating()
+
+            if (lock) {
+                // Wait for AF to converge, then latch the locked repeating request so
+                // the focus actually holds at the tapped point.
+                sess.capture(builder.build(), object : CameraCaptureSession.CaptureCallback() {
+                    override fun onCaptureCompleted(
+                        s: CameraCaptureSession,
+                        request: CaptureRequest,
+                        result: android.hardware.camera2.TotalCaptureResult
+                    ) {
+                        val afState = result.get(android.hardware.camera2.CaptureResult.CONTROL_AF_STATE)
+                        if (afState == null ||
+                            afState == android.hardware.camera2.CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED ||
+                            afState == android.hardware.camera2.CaptureResult.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED
+                        ) {
+                            startRepeating() // applyControls() holds focus while locked
+                        }
+                    }
+                }, cameraHandler)
+            } else {
+                // Momentary tap: trigger once, then resume continuous AF.
+                sess.capture(builder.build(), null, cameraHandler)
+                startRepeating()
+            }
         } catch (e: Exception) {
             callbacks?.onError("focus: ${e.message}")
         }
@@ -329,46 +369,67 @@ class CameraController(private val context: Context) {
             try {
                 currentFile = file
                 pendingNextFile = null
+                recorderStarted = false
+                pendingRecorderStart = true
                 recorder = buildRecorder(file, maxBytes, orientationHint)
                 recording = true
-                createSession() // rebuild with the recorder surface, then start()
-                cameraHandler.postDelayed({ startRecorderSafely() }, 250)
+                callbacks?.onActiveRecordingFile(file)
+                createSession() // rebuild with recorder surface; onConfigured starts it
             } catch (e: Exception) {
                 recording = false
+                pendingRecorderStart = false
+                try {
+                    recorder?.release()
+                } catch (_: Exception) {
+                }
+                recorder = null
                 callbacks?.onError("startRecording: ${e.message}")
             }
         }
     }
 
-    private fun startRecorderSafely() {
-        try {
-            recorder?.start()
-        } catch (e: Exception) {
-            callbacks?.onError("recorder.start: ${e.message}")
-        }
+    fun stopRecording() {
+        cameraHandler.post { finishRecording(interrupted = false) }
     }
 
-    fun stopRecording() {
-        cameraHandler.post {
-            if (!recording) return@post
-            recording = false
-            val finished = currentFile
+    /**
+     * Tears down the recorder. Delivers the finished file only if it was actually
+     * started and is non-empty; deletes empty/aborted files so they are never
+     * uploaded. [interrupted] true means an unexpected end (max size reached).
+     */
+    private fun finishRecording(interrupted: Boolean) {
+        if (!recording && !interrupted) return
+        recording = false
+        pendingRecorderStart = false
+        val finished = currentFile
+        var stoppedCleanly = false
+        if (recorderStarted) {
             try {
                 recorder?.stop()
+                stoppedCleanly = true
             } catch (e: Exception) {
-                // stop() can throw if stopped almost immediately; file may be unusable.
+                // Stopped almost immediately or already errored: file is unusable.
             }
-            try {
-                recorder?.reset()
-                recorder?.release()
-            } catch (_: Exception) {
-            }
-            recorder = null
-            currentFile = null
-            pendingNextFile = null
-            createSession() // rebuild without the recorder surface
-            finished?.let { callbacks?.onRecordingFileCompleted(it) }
         }
+        try {
+            recorder?.reset()
+            recorder?.release()
+        } catch (_: Exception) {
+        }
+        recorder = null
+        recorderStarted = false
+        // Discard a pre-created next segment that never started recording.
+        pendingNextFile?.let { if (it.exists() && it.length() == 0L) it.delete() }
+        pendingNextFile = null
+        currentFile = null
+        createSession() // rebuild without the recorder surface
+
+        if (stoppedCleanly && finished != null && finished.length() > 0L) {
+            callbacks?.onRecordingFileCompleted(finished)
+        } else {
+            finished?.let { if (it.exists() && it.length() == 0L) it.delete() }
+        }
+        if (interrupted) callbacks?.onRecordingInterrupted()
     }
 
     @Suppress("DEPRECATION")
@@ -403,7 +464,14 @@ class CameraController(private val context: Context) {
                     val completed = currentFile
                     currentFile = pendingNextFile
                     pendingNextFile = null
+                    currentFile?.let { callbacks?.onActiveRecordingFile(it) }
                     completed?.let { callbacks?.onRecordingFileCompleted(it) }
+                }
+                MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_REACHED -> {
+                    // Rollover did not take over (e.g. setNextOutputFile failed):
+                    // the recorder has stopped writing. Finalise so the file is not
+                    // lost and the state machine can re-arm.
+                    cameraHandler.post { finishRecording(interrupted = true) }
                 }
             }
         }
@@ -424,12 +492,11 @@ class CameraController(private val context: Context) {
     fun close() {
         cameraHandler.post {
             try {
-                if (recording) {
-                    recording = false
-                    recorder?.stop()
-                }
+                if (recording && recorderStarted) recorder?.stop()
             } catch (_: Exception) {
             }
+            recording = false
+            recorderStarted = false
             try {
                 recorder?.release()
             } catch (_: Exception) {

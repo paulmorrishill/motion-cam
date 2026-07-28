@@ -85,4 +85,10 @@ class RecorderStateMachine(
         if (state == State.DISARMED) state = State.ARMED
         return emptyList()
     }
+
+    /** Force back to ARMED after an unexpected recorder end (no STOP action needed). */
+    fun forceArm() {
+        state = State.ARMED
+        graceDeadlineMs = 0L
+    }
 }
