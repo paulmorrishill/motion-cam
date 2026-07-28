@@ -89,12 +89,9 @@ jobs:
           ram-size: 4096M
           emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back emulated -camera-front emulated
           disable-animations: true
-          script: |
-            ./gradlew connectedDebugAndroidTest --console=plain; rc=$?
-            mkdir -p screenshots
-            adb pull /sdcard/Android/data/com.motioncam/files/ screenshots/ || true
-            find screenshots -name '*.png' || true
-            exit $rc
+          # Single line on purpose: the emulator-runner executes each script LINE
+          # as a separate shell, which would drop $rc and mask test failures.
+          script: 'set +e; ./gradlew connectedDebugAndroidTest --console=plain; rc=$?; mkdir -p screenshots; for f in 1_main_screen 2_settings_screen 3_uploads_screen; do adb exec-out run-as com.motioncam cat files/$f.png > "screenshots/$f.png" 2>/dev/null || true; done; ls -la screenshots || true; exit $rc'
 
       - name: Upload UI screenshot
         if: always()

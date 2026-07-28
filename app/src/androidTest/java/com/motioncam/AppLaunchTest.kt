@@ -35,36 +35,47 @@ class AppLaunchTest {
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithTextContains("Settings").fetchSemanticsNodes().isNotEmpty()
         }
+
+        // Default keep-screen mode is OFF, which shows an all-black "asleep"
+        // overlay (burn-in protection). Tap the centre to wake so the controls
+        // are visible and interactive, matching how a user would use it.
+        val inst = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+        val device = androidx.test.uiautomator.UiDevice.getInstance(inst)
+        device.click(device.displayWidth / 2, device.displayHeight / 2)
+        composeRule.waitForIdle()
+
         composeRule.onNodeWithText("Settings").assertIsDisplayed()
         composeRule.onNodeWithText("Uploads").assertIsDisplayed()
 
         captureScreenshot("1_main_screen")
 
-        // Navigate to Settings and capture it.
+        // Navigate to Settings (wait on the "Save" button — a plain Text node).
         composeRule.onNodeWithText("Settings").performClick()
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithTextContains("Device name").fetchSemanticsNodes().isNotEmpty()
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.onAllNodesWithTextContains("Save").fetchSemanticsNodes().isNotEmpty()
         }
+        composeRule.waitForIdle()
         captureScreenshot("2_settings_screen")
         composeRule.onNodeWithText("Cancel").performClick()
 
-        // Navigate to Uploads and capture it.
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        // Back on the main screen, navigate to Uploads.
+        composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithTextContains("Uploads").fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithText("Uploads").performClick()
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithTextContains("Queue").fetchSemanticsNodes().isNotEmpty()
         }
+        composeRule.waitForIdle()
         captureScreenshot("3_uploads_screen")
     }
 
-    /** Best-effort UI screenshot for evidence; never fails the test. */
+    /** Best-effort UI screenshot for evidence; never fails the test. Written to
+     *  the app's internal files dir so CI can pull it with `run-as`. */
     private fun captureScreenshot(name: String) {
         try {
             val inst = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
-            val dir = inst.targetContext.getExternalFilesDir(null)
-            val file = java.io.File(dir, "$name.png")
+            val file = java.io.File(inst.targetContext.filesDir, "$name.png")
             androidx.test.uiautomator.UiDevice.getInstance(inst).takeScreenshot(file)
         } catch (e: Exception) {
             // ignore — screenshot is diagnostic only
