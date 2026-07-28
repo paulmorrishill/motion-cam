@@ -267,8 +267,10 @@ class CameraService : Service(), CameraController.Callbacks {
         val freePercent = ((free * 100) / total).toInt()
         val storageLow = freePercent <= s.storageLowPercent
         val batteryLow = batteryPercent < s.batteryLowPercent
+        val recording = AppState.snapshot().isRecording
 
-        if (storageLow && now - lastStorageBeep >= warnBeepIntervalMs) {
+        // Storage-low cue repeats only while recording (per spec).
+        if (storageLow && recording && now - lastStorageBeep >= warnBeepIntervalMs) {
             lastStorageBeep = now
             beeper.storageLow()
         }

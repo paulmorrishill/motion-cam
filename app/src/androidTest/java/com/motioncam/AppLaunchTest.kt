@@ -3,6 +3,7 @@ package com.motioncam
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
 import com.motioncam.ui.MainActivity
@@ -37,7 +38,25 @@ class AppLaunchTest {
         composeRule.onNodeWithText("Settings").assertIsDisplayed()
         composeRule.onNodeWithText("Uploads").assertIsDisplayed()
 
-        captureScreenshot("main_screen")
+        captureScreenshot("1_main_screen")
+
+        // Navigate to Settings and capture it.
+        composeRule.onNodeWithText("Settings").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTextContains("Device name").fetchSemanticsNodes().isNotEmpty()
+        }
+        captureScreenshot("2_settings_screen")
+        composeRule.onNodeWithText("Cancel").performClick()
+
+        // Navigate to Uploads and capture it.
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTextContains("Uploads").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("Uploads").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTextContains("Queue").fetchSemanticsNodes().isNotEmpty()
+        }
+        captureScreenshot("3_uploads_screen")
     }
 
     /** Best-effort UI screenshot for evidence; never fails the test. */

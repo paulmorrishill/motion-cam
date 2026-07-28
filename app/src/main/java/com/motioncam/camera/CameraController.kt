@@ -46,6 +46,9 @@ class CameraController(private val context: Context) {
         fun nextRecordingFile(): File
 
         fun onError(message: String)
+
+        /** The camera device has opened and the initial session is being configured. */
+        fun onCameraReady() {}
     }
 
     private val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
@@ -169,6 +172,7 @@ class CameraController(private val context: Context) {
         override fun onOpened(camera: CameraDevice) {
             device = camera
             createSession()
+            callbacks?.onCameraReady()
         }
 
         override fun onDisconnected(camera: CameraDevice) {

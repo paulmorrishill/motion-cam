@@ -92,7 +92,8 @@ jobs:
           script: |
             ./gradlew connectedDebugAndroidTest --console=plain; rc=$?
             mkdir -p screenshots
-            adb pull /sdcard/Android/data/com.motioncam/files/main_screen.png screenshots/ || true
+            adb pull /sdcard/Android/data/com.motioncam/files/ screenshots/ || true
+            find screenshots -name '*.png' || true
             exit $rc
 
       - name: Upload UI screenshot
@@ -100,7 +101,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ui-screenshot
-          path: screenshots/*.png
+          path: screenshots/**/*.png
           if-no-files-found: ignore
 
       - name: Upload instrumented test report
