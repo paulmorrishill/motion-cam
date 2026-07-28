@@ -68,8 +68,9 @@ class CameraController(private val context: Context) {
     private var recording = false
     private var recorderStarted = false
     private var pendingRecorderStart = false
-    private var currentFile: File? = null
-    private var pendingNextFile: File? = null
+    private val rollover = RolloverCoordinator {
+        callbacks?.nextRecordingFile() ?: File(context.cacheDir, "segment-${System.nanoTime()}.mp4")
+    }
 
     // Camera control state.
     private var torchOn = false
@@ -379,8 +380,7 @@ class CameraController(private val context: Context) {
         cameraHandler.post {
             if (recording) return@post
             try {
-                currentFile = file
-                pendingNextFile = null
+                rollover.begin(file)
                 recorderStarted = false
                 pendingRecorderStart = true
                 recorder = buildRecorder(file, maxBytes, orientationHint)
@@ -413,7 +413,7 @@ class CameraController(private val context: Context) {
         if (!recording && !interrupted) return
         recording = false
         pendingRecorderStart = false
-        val finished = currentFile
+        val finished = rollover.currentFile
         var stoppedCleanly = false
         if (recorderStarted) {
             try {
@@ -431,9 +431,8 @@ class CameraController(private val context: Context) {
         recorder = null
         recorderStarted = false
         // Discard a pre-created next segment that never started recording.
-        pendingNextFile?.let { if (it.exists() && it.length() == 0L) it.delete() }
-        pendingNextFile = null
-        currentFile = null
+        rollover.pendingFile?.let { if (it.exists() && it.length() == 0L) it.delete() }
+        rollover.reset()
         createSession() // rebuild without the recorder surface
 
         if (stoppedCleanly && finished != null && finished.length() > 0L) {
@@ -461,22 +460,17 @@ class CameraController(private val context: Context) {
         rec.setOnInfoListener { _, what, _ ->
             when (what) {
                 MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_APPROACHING -> {
-                    val next = callbacks?.nextRecordingFile()
-                    if (next != null) {
-                        pendingNextFile = next
-                        try {
-                            recorder?.setNextOutputFile(next)
-                        } catch (e: Exception) {
-                            callbacks?.onError("setNextOutputFile: ${e.message}")
-                        }
+                    val next = rollover.onApproaching()
+                    try {
+                        recorder?.setNextOutputFile(next)
+                    } catch (e: Exception) {
+                        callbacks?.onError("setNextOutputFile: ${e.message}")
                     }
                 }
                 MediaRecorder.MEDIA_RECORDER_INFO_NEXT_OUTPUT_FILE_STARTED -> {
                     // Previous file is complete; the next segment is now recording.
-                    val completed = currentFile
-                    currentFile = pendingNextFile
-                    pendingNextFile = null
-                    currentFile?.let { callbacks?.onActiveRecordingFile(it) }
+                    val (completed, active) = rollover.onNextStarted()
+                    active?.let { callbacks?.onActiveRecordingFile(it) }
                     completed?.let { callbacks?.onRecordingFileCompleted(it) }
                 }
                 MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_REACHED -> {
@@ -496,7 +490,7 @@ class CameraController(private val context: Context) {
         return (ratio * 12_000_000).toInt().coerceIn(3_000_000, 60_000_000)
     }
 
-    fun currentRecordingFile(): File? = currentFile
+    fun currentRecordingFile(): File? = rollover.currentFile
 
     fun sensorOrientation(): Int =
         characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
