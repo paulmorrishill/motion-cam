@@ -84,14 +84,23 @@ class AppLaunchTest {
         }
     }
 
-    /** Best-effort UI screenshot for evidence; never fails the test. Written to
-     *  the app's internal files dir so CI can pull it with `run-as`. */
+    /** Best-effort UI screenshot for evidence; never fails the test. Written via
+     *  MediaStore to shared Pictures/motioncam so it survives the post-test app
+     *  uninstall and CI can pull it from /sdcard without run-as. */
     private fun captureScreenshot(name: String) {
         try {
             val inst = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
             val bmp = inst.uiAutomation.takeScreenshot() ?: return
-            val file = java.io.File(inst.targetContext.filesDir, "$name.png")
-            java.io.FileOutputStream(file).use { out ->
+            val resolver = inst.targetContext.contentResolver
+            val values = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, "$name.png")
+                put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/png")
+                put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, "Pictures/motioncam")
+            }
+            val uri = resolver.insert(
+                android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values
+            ) ?: return
+            resolver.openOutputStream(uri)?.use { out ->
                 bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
             }
             bmp.recycle()
