@@ -36,6 +36,20 @@ class AppLaunchTest {
         }
         composeRule.onNodeWithText("Settings").assertIsDisplayed()
         composeRule.onNodeWithText("Uploads").assertIsDisplayed()
+
+        captureScreenshot("main_screen")
+    }
+
+    /** Best-effort UI screenshot for evidence; never fails the test. */
+    private fun captureScreenshot(name: String) {
+        try {
+            val inst = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+            val dir = inst.targetContext.getExternalFilesDir(null)
+            val file = java.io.File(dir, "$name.png")
+            androidx.test.uiautomator.UiDevice.getInstance(inst).takeScreenshot(file)
+        } catch (e: Exception) {
+            // ignore — screenshot is diagnostic only
+        }
     }
 }
 

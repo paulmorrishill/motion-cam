@@ -89,7 +89,19 @@ jobs:
           ram-size: 4096M
           emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back emulated -camera-front emulated
           disable-animations: true
-          script: ./gradlew connectedDebugAndroidTest --console=plain
+          script: |
+            ./gradlew connectedDebugAndroidTest --console=plain; rc=$?
+            mkdir -p screenshots
+            adb pull /sdcard/Android/data/com.motioncam/files/main_screen.png screenshots/ || true
+            exit $rc
+
+      - name: Upload UI screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-screenshot
+          path: screenshots/*.png
+          if-no-files-found: ignore
 
       - name: Upload instrumented test report
         if: always()
