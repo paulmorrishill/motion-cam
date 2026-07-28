@@ -90,6 +90,7 @@ class AppLaunchTest {
     private fun captureScreenshot(name: String) {
         try {
             val inst = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+            Thread.sleep(700) // let the drawn frame catch up to the composition
             val bmp = inst.uiAutomation.takeScreenshot() ?: return
             val resolver = inst.targetContext.contentResolver
             val values = android.content.ContentValues().apply {

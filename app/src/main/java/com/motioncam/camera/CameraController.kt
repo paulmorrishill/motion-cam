@@ -58,6 +58,8 @@ class CameraController(private val context: Context) {
 
     private var device: CameraDevice? = null
     private var session: CameraCaptureSession? = null
+    private var sessionSurfaces: List<Surface> = emptyList()
+    private var sessionGeneration = 0
     private var motionReader: ImageReader? = null
     private var recorder: MediaRecorder? = null
 
@@ -208,10 +210,17 @@ class CameraController(private val context: Context) {
             if (recording) recorder?.surface?.let { add(it) }
         }
         if (surfaces.isEmpty()) return
+        val gen = ++sessionGeneration
         @Suppress("DEPRECATION")
         dev.createCaptureSession(surfaces, object : CameraCaptureSession.StateCallback() {
             override fun onConfigured(configured: CameraCaptureSession) {
+                // A newer session was requested while this one configured: drop it.
+                if (gen != sessionGeneration) {
+                    try { configured.close() } catch (_: Exception) {}
+                    return
+                }
                 session = configured
+                sessionSurfaces = surfaces
                 startRepeating()
                 // Start the recorder only once the session (incl. recorder surface)
                 // is actually configured, so no leading frames are lost.
@@ -238,9 +247,10 @@ class CameraController(private val context: Context) {
         try {
             val template = if (recording) CameraDevice.TEMPLATE_RECORD else CameraDevice.TEMPLATE_PREVIEW
             val builder = dev.createCaptureRequest(template)
-            previewSurface?.let { builder.addTarget(it) }
-            motionReader?.surface?.let { builder.addTarget(it) }
-            if (recording) recorder?.surface?.let { builder.addTarget(it) }
+            // Target exactly the surfaces this session was configured with, to avoid
+            // "CaptureRequest contains unconfigured Surface" when surfaces changed
+            // between session creation and this request.
+            sessionSurfaces.forEach { builder.addTarget(it) }
             applyControls(builder)
             sess.setRepeatingRequest(builder.build(), null, cameraHandler)
         } catch (e: Exception) {
@@ -308,9 +318,7 @@ class CameraController(private val context: Context) {
         try {
             val template = if (recording) CameraDevice.TEMPLATE_RECORD else CameraDevice.TEMPLATE_PREVIEW
             val builder = dev.createCaptureRequest(template)
-            previewSurface?.let { builder.addTarget(it) }
-            motionReader?.surface?.let { builder.addTarget(it) }
-            if (recording) recorder?.surface?.let { builder.addTarget(it) }
+            sessionSurfaces.forEach { builder.addTarget(it) }
             builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO)
             focusRegion?.let {
                 builder.set(CaptureRequest.CONTROL_AF_REGIONS, arrayOf(it))
