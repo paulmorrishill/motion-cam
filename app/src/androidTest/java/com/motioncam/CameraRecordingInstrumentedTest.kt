@@ -59,6 +59,11 @@ class CameraRecordingInstrumentedTest {
             assertThat(durationMs).isNotNull()
             assertThat(durationMs!!).isGreaterThan(0L)
             assertThat(hasVideo).isEqualTo("yes")
+            // Landscape: rotation metadata must be 0 or 180 (even), never 90/270.
+            val rotation =
+                retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)
+                    ?.toIntOrNull() ?: 0
+            assertThat(rotation % 180).isEqualTo(0)
         } finally {
             retriever.release()
         }
@@ -110,7 +115,8 @@ class CameraRecordingInstrumentedTest {
                 diag.append("attempt $attempt: camera not ready (errors: $errors)\n")
                 return null
             }
-            controller.startRecording(outFile, maxBytes = 512L * 1024 * 1024, orientationHint = 90)
+            // Landscape orientation hint (0); the output must not be portrait-rotated.
+            controller.startRecording(outFile, maxBytes = 512L * 1024 * 1024, orientationHint = 0)
             Thread.sleep(5_000) // record a few seconds of the emulated scene
             controller.stopRecording()
             if (!completed.await(25, TimeUnit.SECONDS)) {
