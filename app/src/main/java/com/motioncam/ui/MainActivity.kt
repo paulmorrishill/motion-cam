@@ -125,4 +125,22 @@ class MainActivity : ComponentActivity() {
     }
 
     fun openBatteryOptSettings() = requestIgnoreBatteryOptimizations()
+
+    /** Fully stop the app: shut down the service (releases camera + wake lock),
+     *  unbind, stop the service so START_STICKY does not restart it, and remove
+     *  the task from recents. */
+    fun quitApp() {
+        val svc = serviceState.value
+        try {
+            svc?.shutdown()
+        } catch (_: Exception) {
+        }
+        try {
+            unbindService(connection)
+        } catch (_: Exception) {
+        }
+        serviceState.value = null
+        stopService(Intent(this, CameraService::class.java))
+        finishAndRemoveTask()
+    }
 }

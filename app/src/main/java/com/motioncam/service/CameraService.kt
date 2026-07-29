@@ -352,6 +352,14 @@ class CameraService : Service(), CameraController.Callbacks {
         applyTorchForMotion(motionPresent)
     }
 
+    /** User asked to fully stop the app: leave the foreground, stop the service
+     *  (cleanup — camera/recorder/wake lock release — happens in onDestroy). */
+    fun shutdown() {
+        L.i("Service", "user requested shutdown")
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
     fun reloadSettings() {
         val s = settings.current
         detector.setSensitivity(s.motionSensitivity)

@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -115,6 +117,14 @@ fun SettingsScreen(activity: MainActivity, onBack: () -> Unit) {
                 modifier = Modifier.weight(1f)
             ) { Text("Save") }
         }
+
+        // Fully stop the app (stops recording, releases the camera, stops the
+        // service so it is not restarted).
+        Button(
+            onClick = { activity.quitApp() },
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("Stop recording & exit app") }
     }
 }
 
