@@ -8,11 +8,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -49,12 +53,22 @@ fun MotionCamRoot(serviceProvider: () -> CameraService?, activity: MainActivity)
 
     // Keep-screen state lives at the root so it survives navigating to Settings/
     // Uploads and back (otherwise the user's screen choice would reset each time).
-    var keepMode by remember { mutableStateOf(KeepScreenMode.OFF) }
+    // Default ALWAYS: preview visible at normal brightness; the user opts into the
+    // dimmed/black burn-in modes explicitly.
+    var keepMode by remember { mutableStateOf(KeepScreenMode.ALWAYS) }
     var lastWake by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
     when (screen) {
-        Screen.SETTINGS -> SettingsScreen(activity = activity, onBack = { screen = Screen.MAIN })
-        Screen.UPLOADS -> UploadsScreen(ui = ui, onBack = { screen = Screen.MAIN })
+        // Opaque surface so the launch windowBackground (splash logo) never bleeds
+        // through behind the form controls.
+        Screen.SETTINGS -> Surface(
+            Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) { SettingsScreen(activity = activity, onBack = { screen = Screen.MAIN }) }
+        Screen.UPLOADS -> Surface(
+            Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) { UploadsScreen(ui = ui, onBack = { screen = Screen.MAIN }) }
         Screen.MAIN -> MainScreen(
             service = service,
             activity = activity,
@@ -126,7 +140,12 @@ private fun MainScreen(
         )
 
         // Top status + warning banners.
-        Column(Modifier.fillMaxWidth().padding(12.dp)) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .padding(12.dp)
+        ) {
             StatusHeader(
                 statusText = ui.statusText,
                 recording = ui.isRecording,
@@ -151,7 +170,8 @@ private fun MainScreen(
             Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .background(Color(0xAA000000))
+                .background(Color(0xCC000000))
+                .windowInsetsPadding(WindowInsets.navigationBars)
                 .padding(8.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically

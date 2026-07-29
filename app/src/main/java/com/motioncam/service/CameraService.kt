@@ -23,6 +23,7 @@ import com.motioncam.ui.MainActivity
 import com.motioncam.upload.UploadManager
 import com.motioncam.util.Beeper
 import com.motioncam.util.Filenames
+import com.motioncam.util.L
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -127,6 +128,7 @@ class CameraService : Service(), CameraController.Callbacks {
         }
 
         AppState.update { it.copy(serviceRunning = true) }
+        L.i("Service", "camera service created; recordings in ${recordingsDir.absolutePath}")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -179,6 +181,7 @@ class CameraService : Service(), CameraController.Callbacks {
 
     private fun applyMotionChange(present: Boolean, now: Long) {
         motionPresent = present
+        L.d("Motion", "motion ${if (present) "detected" else "cleared"} state=${stateMachine.state}")
         AppState.update { it.copy(motionActive = present) }
         applyTorchForMotion(present)
         handleActions(stateMachine.onMotion(present, now), now)
@@ -206,7 +209,9 @@ class CameraService : Service(), CameraController.Callbacks {
         val file = makeRecordingFile()
         recordingStartTime = now
         val maxBytes = settings.current.maxFileSizeMb.toLong() * 1024L * 1024L
-        controller.startRecording(file, maxBytes, controller.sensorOrientation())
+        val hint = controller.orientationHint(currentDisplayRotation())
+        L.i("Rec", "start ${file.name} hint=$hint max=${settings.current.maxFileSizeMb}MB")
+        controller.startRecording(file, maxBytes, hint)
         beeper.recordingStarted()
         AppState.update {
             it.copy(currentFileName = file.name, recorderState = stateMachine.state)
@@ -215,6 +220,7 @@ class CameraService : Service(), CameraController.Callbacks {
     }
 
     private fun stopRecording() {
+        L.i("Rec", "stop recording (state=${stateMachine.state})")
         controller.stopRecording()
         beeper.recordingStopped()
         AppState.update { it.copy(currentFileName = null, recorderState = stateMachine.state) }
@@ -236,6 +242,7 @@ class CameraService : Service(), CameraController.Callbacks {
 
     override fun onRecordingInterrupted() {
         // Recorder ended unexpectedly (max size reached without rollover).
+        L.w("Rec", "recording interrupted (max size reached without rollover)")
         analysis.execute {
             stateMachine.forceArm()
             AppState.update {
@@ -254,7 +261,18 @@ class CameraService : Service(), CameraController.Callbacks {
         return File(recordingsDir, name)
     }
 
+    /** Current default-display rotation (Surface.ROTATION_*), for recording orientation. */
+    private fun currentDisplayRotation(): Int {
+        return try {
+            val dm = getSystemService(Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager
+            dm.getDisplay(android.view.Display.DEFAULT_DISPLAY)?.rotation ?: android.view.Surface.ROTATION_0
+        } catch (e: Exception) {
+            android.view.Surface.ROTATION_0
+        }
+    }
+
     override fun onError(message: String) {
+        L.e("Camera", "camera error: $message")
         AppState.update { it.copy(cameraError = message) }
     }
 

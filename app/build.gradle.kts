@@ -86,6 +86,9 @@ dependencies {
     // Plain (unsecured) FTP client for local-network sync.
     implementation("commons-net:commons-net:3.11.1")
 
+    // Crash / error reporting.
+    implementation("io.sentry:sentry-android:8.50.1")
+
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
     testImplementation("com.google.truth:truth:1.4.4")

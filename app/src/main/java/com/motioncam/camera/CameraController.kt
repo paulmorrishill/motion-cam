@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.ImageFormat
 import android.graphics.Rect
+import android.hardware.camera2.CameraAccessException
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraDevice
@@ -17,6 +18,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.util.Size
 import android.view.Surface
+import com.motioncam.util.L
 import java.io.File
 import kotlin.math.max
 import kotlin.math.min
@@ -76,6 +78,7 @@ class CameraController(private val context: Context) {
     private var torchOn = false
     private var focusLocked = false
     private var focusRegion: MeteringRectangle? = null
+    private var awaitingFocus = false
 
     var recordingSize: Size = Size(1920, 1080)
         private set
@@ -254,8 +257,11 @@ class CameraController(private val context: Context) {
             sessionSurfaces.forEach { builder.addTarget(it) }
             applyControls(builder)
             sess.setRepeatingRequest(builder.build(), null, cameraHandler)
-        } catch (e: Exception) {
-            callbacks?.onError("repeating: ${e.message}")
+        } catch (e: IllegalStateException) {
+            // Session closed/replaced concurrently — a fresh session will restore preview.
+            L.w("Camera", "repeating on closed session: ${e.message}")
+        } catch (e: CameraAccessException) {
+            L.w("Camera", "repeating access error: ${e.message}", e)
         }
     }
 
@@ -313,47 +319,65 @@ class CameraController(private val context: Context) {
         }
     }
 
+    /**
+     * Tap-to-focus. Crucially this NEVER rebuilds/closes the capture session — it
+     * only reprograms the AF regions/trigger on the existing session. The steady
+     * repeating request (with the new regions) is submitted FIRST so the preview
+     * keeps running, then a single AF trigger is fired; a settle callback restores
+     * a clean repeating request so the preview can never be left frozen. All
+     * session access is guarded and CameraAccessException / IllegalStateException
+     * (session closed concurrently) are swallowed instead of crashing.
+     */
     private fun triggerAutoFocus(lock: Boolean) {
         val dev = device ?: return
         val sess = session ?: return
+        val region = focusRegion
+        val maxAf = characteristics.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AF) ?: 0
+        val maxAe = characteristics.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AE) ?: 0
         try {
             val template = if (recording) CameraDevice.TEMPLATE_RECORD else CameraDevice.TEMPLATE_PREVIEW
             val builder = dev.createCaptureRequest(template)
             sessionSurfaces.forEach { builder.addTarget(it) }
+            builder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO)
             builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO)
-            focusRegion?.let {
-                builder.set(CaptureRequest.CONTROL_AF_REGIONS, arrayOf(it))
-                builder.set(CaptureRequest.CONTROL_AE_REGIONS, arrayOf(it))
-            }
+            if (region != null && maxAf > 0) builder.set(CaptureRequest.CONTROL_AF_REGIONS, arrayOf(region))
+            if (region != null && maxAe > 0) builder.set(CaptureRequest.CONTROL_AE_REGIONS, arrayOf(region))
             builder.set(CaptureRequest.FLASH_MODE,
                 if (torchOn) CaptureRequest.FLASH_MODE_TORCH else CaptureRequest.FLASH_MODE_OFF)
-            builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_START)
 
-            if (lock) {
-                // Wait for AF to converge, then latch the locked repeating request so
-                // the focus actually holds at the tapped point.
-                sess.capture(builder.build(), object : CameraCaptureSession.CaptureCallback() {
-                    override fun onCaptureCompleted(
-                        s: CameraCaptureSession,
-                        request: CaptureRequest,
-                        result: android.hardware.camera2.TotalCaptureResult
-                    ) {
-                        val afState = result.get(android.hardware.camera2.CaptureResult.CONTROL_AF_STATE)
-                        if (afState == null ||
-                            afState == android.hardware.camera2.CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED ||
-                            afState == android.hardware.camera2.CaptureResult.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED
-                        ) {
-                            startRepeating() // applyControls() holds focus while locked
-                        }
-                    }
-                }, cameraHandler)
-            } else {
-                // Momentary tap: trigger once, then resume continuous AF.
-                sess.capture(builder.build(), null, cameraHandler)
-                startRepeating()
+            awaitingFocus = true
+            // 1) Steady repeating request WITH the new regions but IDLE trigger, so
+            //    the preview never stops.
+            builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_IDLE)
+            sess.setRepeatingRequest(builder.build(), afCaptureCallback, cameraHandler)
+
+            // 2) One-time AF trigger.
+            builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_START)
+            sess.capture(builder.build(), afCaptureCallback, cameraHandler)
+            L.d("Focus", "tap-to-focus lock=$lock region=$region")
+        } catch (e: CameraAccessException) {
+            L.w("Focus", "focus access error: ${e.message}", e)
+        } catch (e: IllegalStateException) {
+            // Session was closed concurrently between the guard and the call.
+            L.w("Focus", "focus on closed session: ${e.message}")
+        }
+    }
+
+    private val afCaptureCallback = object : CameraCaptureSession.CaptureCallback() {
+        override fun onCaptureCompleted(
+            s: CameraCaptureSession,
+            request: CaptureRequest,
+            result: android.hardware.camera2.TotalCaptureResult
+        ) {
+            val afState = result.get(android.hardware.camera2.CaptureResult.CONTROL_AF_STATE)
+            val settled = afState == null ||
+                afState == android.hardware.camera2.CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED ||
+                afState == android.hardware.camera2.CaptureResult.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED
+            if (awaitingFocus && settled) {
+                awaitingFocus = false // one-shot: restore steady preview exactly once
+                if (!focusLocked) focusRegion = null // momentary tap resumes clean continuous AF
+                startRepeating() // restore a steady repeating request; never leave preview frozen
             }
-        } catch (e: Exception) {
-            callbacks?.onError("focus: ${e.message}")
         }
     }
 
@@ -494,6 +518,25 @@ class CameraController(private val context: Context) {
 
     fun sensorOrientation(): Int =
         characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
+
+    /**
+     * Orientation hint for [MediaRecorder.setOrientationHint] so video plays upright
+     * in any device orientation (portrait and landscape). Formula from Google's
+     * camera sample: (sensor - deviceDegrees * sign) mod 360, sign = -1 back / +1 front.
+     */
+    fun orientationHint(displayRotation: Int): Int {
+        val sensor = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
+        val deviceDegrees = when (displayRotation) {
+            Surface.ROTATION_90 -> 90
+            Surface.ROTATION_180 -> 180
+            Surface.ROTATION_270 -> 270
+            else -> 0
+        }
+        val facingFront =
+            characteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
+        val sign = if (facingFront) 1 else -1
+        return (sensor - deviceDegrees * sign + 360) % 360
+    }
 
     fun close() {
         cameraHandler.post {

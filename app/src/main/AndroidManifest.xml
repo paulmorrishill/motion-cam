@@ -26,6 +26,9 @@
         android:usesCleartextTraffic="true"
         android:theme="@style/Theme.MotionCam">
 
+        <!-- We initialise Sentry manually in MotionCamApp; disable auto-init. -->
+        <meta-data android:name="io.sentry.auto-init" android:value="false" />
+
         <activity
             android:name=".ui.MainActivity"
             android:exported="true"

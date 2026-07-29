@@ -3,6 +3,7 @@ package com.motioncam.upload
 import android.content.Context
 import com.motioncam.service.AppState
 import com.motioncam.settings.SettingsStore
+import com.motioncam.util.L
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
@@ -85,9 +86,11 @@ class UploadManager(
                         markUploaded(file.name, now)
                         setItemStatus(file.name, UploadStatus.DONE, file.length(), null)
                         addRecent(RecentFile(file.name, RecentFile.Event.UPLOADED, now, file.length()))
+                        L.i("Upload", "uploaded ${file.name} (${file.length() / 1024}KB)")
                     }
                     is FtpUploader.Result.Failure -> {
                         setItemStatus(file.name, UploadStatus.FAILED, 0L, result.message)
+                        L.w("Upload", "failed ${file.name}: ${result.message}")
                     }
                 }
             }
@@ -118,6 +121,7 @@ class UploadManager(
             if (f.delete()) {
                 clearUploaded(c.name)
                 addRecent(RecentFile(c.name, RecentFile.Event.DELETED, now, size))
+                L.i("Retention", "deleted uploaded file older than ${retentionDays}d: ${c.name}")
             }
         }
     }
