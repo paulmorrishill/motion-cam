@@ -93,7 +93,7 @@ class CameraService : Service(), CameraController.Callbacks {
     override fun onCreate() {
         super.onCreate()
         settings = SettingsStore.get(this)
-        beeper = Beeper()
+        beeper = Beeper(this)
         recordingsDir = (getExternalFilesDir(android.os.Environment.DIRECTORY_MOVIES)
             ?: filesDir).apply { mkdirs() }
         uploads = UploadManager(this, recordingsDir, settings, scope)
