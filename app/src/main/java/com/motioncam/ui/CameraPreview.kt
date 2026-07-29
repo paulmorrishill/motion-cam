@@ -2,6 +2,7 @@ package com.motioncam.ui
 
 import android.view.SurfaceHolder
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -27,6 +28,7 @@ fun CameraPreview(
     service: CameraService?,
     onTap: (x: Float, y: Float, w: Int, h: Int) -> Unit,
     onLongPress: (x: Float, y: Float, w: Int, h: Int) -> Unit,
+    onZoom: (factor: Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val dims = remember { intArrayOf(1, 1) }
@@ -40,12 +42,19 @@ fun CameraPreview(
     }
 
     AndroidView(
-        modifier = modifier.pointerInput(Unit) {
-            detectTapGestures(
-                onTap = { o -> onTap(o.x, o.y, dims[0], dims[1]) },
-                onLongPress = { o -> onLongPress(o.x, o.y, dims[0], dims[1]) }
-            )
-        },
+        modifier = modifier
+            .pointerInput(Unit) {
+                // Pinch to zoom; single-finger gestures yield zoom≈1 (no-op).
+                detectTransformGestures { _, _, zoom, _ ->
+                    if (zoom != 1f) onZoom(zoom)
+                }
+            }
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { o -> onTap(o.x, o.y, dims[0], dims[1]) },
+                    onLongPress = { o -> onLongPress(o.x, o.y, dims[0], dims[1]) }
+                )
+            },
         factory = { ctx ->
             AutoFitSurfaceView(ctx).apply {
                 service?.previewSize()?.let { setAspectRatio(it.width, it.height) }

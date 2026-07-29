@@ -142,6 +142,7 @@ private fun MainScreen(
                 if (ui.focusLocked) service?.focusUnlock() else service?.focusTap(x, y, w, h)
             },
             onLongPress = { x, y, w, h -> service?.focusLock(x, y, w, h) },
+            onZoom = { factor -> service?.zoomBy(factor) },
             modifier = Modifier.fillMaxSize()
         )
 
@@ -192,6 +193,13 @@ private fun MainScreen(
                 active = keepMode != KeepScreenMode.OFF,
                 onClick = { setKeepMode(keepMode.next()) }
             )
+            if (ui.maxZoom > 1f) {
+                ControlButton(
+                    label = "Zoom ${"%.1f".format(ui.zoomRatio)}x",
+                    active = ui.zoomRatio > 1f,
+                    onClick = { service?.resetZoom() }
+                )
+            }
             if (ui.recorderState == RecorderStateMachine.State.DISARMED) {
                 ControlButton(label = "Re-arm", active = false, onClick = { service?.rearm() })
             } else {

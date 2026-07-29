@@ -79,6 +79,9 @@ class CameraController(private val context: Context) {
     private var focusLocked = false
     private var focusRegion: MeteringRectangle? = null
     private var awaitingFocus = false
+    private var zoomRatio = 1f
+    var maxZoom = 1f
+        private set
 
     var recordingSize: Size = Size(1920, 1080)
         private set
@@ -122,6 +125,11 @@ class CameraController(private val context: Context) {
     }
 
     private fun selectSizes(desiredRecording: Size?) {
+        maxZoom = if (android.os.Build.VERSION.SDK_INT >= 30) {
+            characteristics.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)?.upper ?: 1f
+        } else {
+            characteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM) ?: 1f
+        }.coerceAtLeast(1f)
         val map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
         val recSizes = map?.getOutputSizes(MediaRecorder::class.java)?.toList().orEmpty()
         recordingSize = when {
@@ -291,7 +299,43 @@ class CameraController(private val context: Context) {
             if (torchOn) CaptureRequest.FLASH_MODE_TORCH else CaptureRequest.FLASH_MODE_OFF
         )
         builder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO)
+        applyZoom(builder)
     }
+
+    /** Applies the current zoom ratio via CONTROL_ZOOM_RATIO (API 30+) or a
+     *  centered SCALER_CROP_REGION fallback. Also called from the focus request. */
+    private fun applyZoom(builder: CaptureRequest.Builder) {
+        val z = zoomRatio.coerceIn(1f, maxZoom)
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            builder.set(CaptureRequest.CONTROL_ZOOM_RATIO, z)
+        } else {
+            val active = characteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
+                ?: return
+            val cropW = (active.width() / z).toInt()
+            val cropH = (active.height() / z).toInt()
+            val left = active.left + (active.width() - cropW) / 2
+            val top = active.top + (active.height() - cropH) / 2
+            builder.set(CaptureRequest.SCALER_CROP_REGION, Rect(left, top, left + cropW, top + cropH))
+        }
+    }
+
+    /** Multiply the current zoom by [factor] (pinch gesture). Returns the new ratio. */
+    fun zoomBy(factor: Float): Float {
+        cameraHandler.post {
+            zoomRatio = (zoomRatio * factor).coerceIn(1f, maxZoom)
+            startRepeating()
+        }
+        return (zoomRatio * factor).coerceIn(1f, maxZoom)
+    }
+
+    fun setZoom(ratio: Float) {
+        cameraHandler.post {
+            zoomRatio = ratio.coerceIn(1f, maxZoom)
+            startRepeating()
+        }
+    }
+
+    fun currentZoom(): Float = zoomRatio
 
     // ---- torch ----
 
@@ -351,6 +395,7 @@ class CameraController(private val context: Context) {
             if (region != null && maxAe > 0) builder.set(CaptureRequest.CONTROL_AE_REGIONS, arrayOf(region))
             builder.set(CaptureRequest.FLASH_MODE,
                 if (torchOn) CaptureRequest.FLASH_MODE_TORCH else CaptureRequest.FLASH_MODE_OFF)
+            applyZoom(builder)
 
             awaitingFocus = true
             // 1) Steady repeating request WITH the new regions but IDLE trigger, so

@@ -234,6 +234,11 @@ class CameraService : Service(), CameraController.Callbacks {
 
     // ---- CameraController.Callbacks ----
 
+    override fun onCameraReady() {
+        AppState.update { it.copy(maxZoom = controller.maxZoom) }
+        L.i("Camera", "ready; maxZoom=${controller.maxZoom}")
+    }
+
     override fun onActiveRecordingFile(file: File) {
         // Track the file currently being written (updated on rollover too) so the
         // uploader never uploads/deletes the in-progress segment.
@@ -333,6 +338,17 @@ class CameraService : Service(), CameraController.Callbacks {
     fun focusUnlock() {
         controller.unlockFocus()
         AppState.update { it.copy(focusLocked = false) }
+    }
+
+    /** Pinch zoom: multiply current zoom by [factor]. */
+    fun zoomBy(factor: Float) {
+        val z = controller.zoomBy(factor)
+        AppState.update { it.copy(zoomRatio = z, maxZoom = controller.maxZoom) }
+    }
+
+    fun resetZoom() {
+        controller.setZoom(1f)
+        AppState.update { it.copy(zoomRatio = 1f, maxZoom = controller.maxZoom) }
     }
 
     fun stopOrDisarm() {

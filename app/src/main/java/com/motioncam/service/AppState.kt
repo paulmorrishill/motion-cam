@@ -22,6 +22,8 @@ data class UiState(
     val keepScreenMode: KeepScreenMode = KeepScreenMode.OFF,
     val screenAsleep: Boolean = false,
     val focusLocked: Boolean = false,
+    val zoomRatio: Float = 1f,
+    val maxZoom: Float = 1f,
     val storageLow: Boolean = false,
     val batteryLow: Boolean = false,
     val storageFreePercent: Int = 100,
