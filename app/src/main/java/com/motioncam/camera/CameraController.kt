@@ -531,6 +531,10 @@ class CameraController(private val context: Context) {
         rec.setVideoSize(recordingSize.width, recordingSize.height)
         rec.setVideoEncoder(MediaRecorder.VideoEncoder.H264)
         rec.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+        // Full-quality audio (defaults are very low: ~8kHz/low bitrate).
+        rec.setAudioSamplingRate(48_000)
+        rec.setAudioChannels(2)
+        rec.setAudioEncodingBitRate(192_000)
         rec.setMaxFileSize(maxBytes)
         rec.setOrientationHint(orientationHint)
         rec.setOnInfoListener { _, what, _ ->
