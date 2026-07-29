@@ -129,10 +129,17 @@ class CameraController(private val context: Context) {
             recSizes.isNotEmpty() -> chooseRecording(recSizes)
             else -> Size(1920, 1080)
         }
-        val previewCandidates = map?.getOutputSizes(android.graphics.SurfaceTexture::class.java)
+        // Preview sizes are queried for SurfaceHolder (the SurfaceView output class),
+        // in sensor space (landscape). Pick the largest <= 1080p, preferring 16:9.
+        val previewCandidates = map?.getOutputSizes(android.view.SurfaceHolder::class.java)
             ?.filter { it.width <= 1920 && it.height <= 1080 }
             ?.toList().orEmpty()
-        previewSize = previewCandidates.maxByOrNull { it.width.toLong() * it.height }
+        previewSize = previewCandidates
+            .firstOrNull { it.width == 1920 && it.height == 1080 }
+            ?: previewCandidates.filter {
+                val r = it.width.toDouble() / it.height; r in 1.7..1.8
+            }.maxByOrNull { it.width.toLong() * it.height }
+            ?: previewCandidates.maxByOrNull { it.width.toLong() * it.height }
             ?: Size(1280, 720)
         val motionCandidates = map?.getOutputSizes(ImageFormat.YUV_420_888)
             ?.filter { it.width <= 800 && it.height <= 800 }

@@ -3,6 +3,8 @@ package com.motioncam.ui
 import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -58,18 +61,12 @@ fun MotionCamRoot(serviceProvider: () -> CameraService?, activity: MainActivity)
     var keepMode by remember { mutableStateOf(KeepScreenMode.ALWAYS) }
     var lastWake by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
-    when (screen) {
-        // Opaque surface so the launch windowBackground (splash logo) never bleeds
-        // through behind the form controls.
-        Screen.SETTINGS -> Surface(
-            Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
-        ) { SettingsScreen(activity = activity, onBack = { screen = Screen.MAIN }) }
-        Screen.UPLOADS -> Surface(
-            Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
-        ) { UploadsScreen(ui = ui, onBack = { screen = Screen.MAIN }) }
-        Screen.MAIN -> MainScreen(
+    Box(Modifier.fillMaxSize()) {
+        // The preview screen is ALWAYS mounted so its SurfaceView is never
+        // destroyed on navigation (preview returns instantly, and a recording in
+        // progress is not interrupted). Settings/Uploads render as opaque overlays
+        // on top, covering the SurfaceView.
+        MainScreen(
             service = service,
             activity = activity,
             keepMode = keepMode,
@@ -82,6 +79,17 @@ fun MotionCamRoot(serviceProvider: () -> CameraService?, activity: MainActivity)
             onOpenSettings = { screen = Screen.SETTINGS },
             onOpenUploads = { screen = Screen.UPLOADS }
         )
+        when (screen) {
+            Screen.SETTINGS -> Surface(
+                Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.background
+            ) { SettingsScreen(activity = activity, onBack = { screen = Screen.MAIN }) }
+            Screen.UPLOADS -> Surface(
+                Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.background
+            ) { UploadsScreen(ui = ui, onBack = { screen = Screen.MAIN }) }
+            Screen.MAIN -> Unit
+        }
     }
 }
 
@@ -122,12 +130,10 @@ private fun MainScreen(
         KeepScreenMode.TIMED -> (nowMs - lastWake) > 60_000L
     }
 
-    // Dim the backlight when dark.
-    LaunchedEffect(dark) {
-        val lp = activity.window.attributes
-        lp.screenBrightness = if (dark) 0.01f else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
-        activity.window.attributes = lp
-    }
+    // Burn-in protection is a black overlay (below); we deliberately do NOT force
+    // the backlight to ~0, because some devices treat that as screen-off and then
+    // touches can't wake it (it gets stuck off). The overlay shows solid black and
+    // any touch wakes it instantly.
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         CameraPreview(
@@ -195,16 +201,20 @@ private fun MainScreen(
             ControlButton(label = "Settings", active = false, onClick = onOpenSettings)
         }
 
-        // Black overlay when the screen is "asleep": tap to wake / show preview.
+        // Black overlay when the screen is "asleep": ANY touch wakes it instantly
+        // and keeps it on for the timed window, so it can never get stuck off.
         if (dark) {
             Box(
                 Modifier
                     .fillMaxSize()
                     .testTag("sleep_overlay")
                     .background(Color.Black)
-                    .clickable {
-                        setLastWake(System.currentTimeMillis())
-                        if (keepMode == KeepScreenMode.OFF) setKeepMode(KeepScreenMode.TIMED)
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false)
+                            setLastWake(System.currentTimeMillis())
+                            setKeepMode(KeepScreenMode.TIMED)
+                        }
                     },
                 contentAlignment = Alignment.TopStart
             ) {

@@ -7,7 +7,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
-import android.graphics.SurfaceTexture
 import android.os.BatteryManager
 import android.os.Binder
 import android.os.Build
@@ -313,14 +312,16 @@ class CameraService : Service(), CameraController.Callbacks {
 
     // ---- commands from the UI (via binder) ----
 
-    fun setPreviewTexture(texture: SurfaceTexture) {
-        texture.setDefaultBufferSize(controller.previewSize.width, controller.previewSize.height)
-        controller.setPreviewSurface(Surface(texture))
+    fun setPreviewSurface(surface: Surface) {
+        controller.setPreviewSurface(surface)
     }
 
     fun clearPreview() {
         controller.setPreviewSurface(null)
     }
+
+    /** Camera preview buffer size (sensor space) for the AutoFitSurfaceView aspect. */
+    fun previewSize(): android.util.Size = controller.previewSize
 
     fun focusTap(x: Float, y: Float, w: Int, h: Int) = controller.focusAt(x, y, w, h, lock = false)
 
