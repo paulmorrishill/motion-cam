@@ -20,14 +20,14 @@ class Beeper {
     private val tone = ToneGenerator(AudioManager.STREAM_MUSIC, ToneGenerator.MAX_VOLUME)
     private val exec = Executors.newSingleThreadExecutor()
 
-    private val lowFreq = 520   // Hz
-    private val highFreq = 1040 // Hz (octave above)
+    private val pulseMs = 250
+    private val gapMs = 250
 
-    /** Low → high rising tones: recording started. */
-    fun recordingStarted() = playSweep(lowFreq, highFreq)
+    /** Three ascending 250ms pulses: recording started. */
+    fun recordingStarted() = playPulses(520, 720, 1000)
 
-    /** High → low falling tones: recording stopped (motion lost). */
-    fun recordingStopped() = playSweep(highFreq, lowFreq)
+    /** Three descending 250ms pulses: recording stopped (motion lost). */
+    fun recordingStopped() = playPulses(1000, 720, 520)
 
     /** Three quick mid beeps — storage low. */
     fun storageLow() = sequence(
@@ -42,12 +42,14 @@ class Beeper {
         Step(ToneGenerator.TONE_SUP_ERROR, 300)
     )
 
-    // ---- synthesized sweep (two pure tones) ----
+    // ---- synthesized pulses (pure tones) ----
 
-    private fun playSweep(firstFreq: Int, secondFreq: Int) {
+    private fun playPulses(vararg freqs: Int) {
         exec.execute {
-            playTone(firstFreq, 170)
-            playTone(secondFreq, 200)
+            for ((i, f) in freqs.withIndex()) {
+                playTone(f, pulseMs)
+                if (i < freqs.size - 1) Thread.sleep(gapMs.toLong())
+            }
         }
     }
 
