@@ -3,18 +3,23 @@ package com.motioncam.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.motioncam.service.UiState
@@ -27,55 +32,79 @@ import java.util.Locale
 
 @Composable
 fun UploadsScreen(ui: UiState, onBack: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.systemBars)
+            .padding(16.dp)
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
             Text("Uploads", style = MaterialTheme.typography.headlineSmall)
             Button(onClick = onBack) { Text("Back") }
         }
 
         LazyColumn(Modifier.fillMaxSize()) {
-            item {
-                Text(
-                    "Queue (${ui.uploadQueue.size})",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
-            }
+            item { SectionHeader("Queue (${ui.uploadQueue.size})") }
             if (ui.uploadQueue.isEmpty()) {
-                item { Text("Nothing queued.", color = Color.Gray) }
+                item { MutedText("Nothing queued.") }
             }
-            items(ui.uploadQueue) { item -> UploadRow(item) }
+            items(ui.uploadQueue) { item ->
+                UploadRow(item)
+                HorizontalDivider()
+            }
 
-            item {
-                Text(
-                    "Recent",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
-                )
-            }
+            item { SectionHeader("Recent") }
             if (ui.recentFiles.isEmpty()) {
-                item { Text("No recent activity.", color = Color.Gray) }
+                item { MutedText("No recent activity.") }
             }
-            items(ui.recentFiles) { rf -> RecentRow(rf) }
+            items(ui.recentFiles) { rf ->
+                RecentRow(rf)
+                HorizontalDivider()
+            }
         }
     }
 }
 
 @Composable
+private fun SectionHeader(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onBackground,
+        modifier = Modifier.padding(top = 16.dp, bottom = 6.dp)
+    )
+}
+
+@Composable
+private fun MutedText(text: String) {
+    Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 4.dp))
+}
+
+@Composable
 private fun UploadRow(item: UploadItem) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(item.name, fontSize = 13.sp, color = Color.White)
-            Text(item.status.name, fontSize = 12.sp, color = statusColor(item.status))
+            Text(
+                item.name,
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
+            )
+            Text(item.status.name, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = statusColor(item.status))
         }
         if (item.status == UploadStatus.UPLOADING) {
             LinearProgressIndicator(
                 progress = { item.progress },
-                modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
             )
             Text(
                 "${item.uploadedBytes / (1024 * 1024)} / ${item.sizeBytes / (1024 * 1024)} MB",
-                fontSize = 11.sp, color = Color.Gray
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         if (item.error != null) {
@@ -87,21 +116,30 @@ private fun UploadRow(item: UploadItem) {
 @Composable
 private fun RecentRow(rf: RecentFile) {
     val fmt = remember0()
-    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(rf.name, fontSize = 12.sp, color = Color.White)
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            rf.name,
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
         Text(
             "${rf.event.name.lowercase()} · ${fmt.format(Date(rf.timeMillis))}",
             fontSize = 11.sp,
-            color = if (rf.event == RecentFile.Event.DELETED) Color(0xFFFF8A65) else Color(0xFF81C784)
+            fontWeight = FontWeight.Bold,
+            color = if (rf.event == RecentFile.Event.DELETED) Color(0xFFE65100) else Color(0xFF2E7D32)
         )
     }
 }
 
 private fun statusColor(status: UploadStatus): Color = when (status) {
-    UploadStatus.QUEUED -> Color(0xFFB0BEC5)
-    UploadStatus.UPLOADING -> Color(0xFF4FC3F7)
-    UploadStatus.DONE -> Color(0xFF81C784)
-    UploadStatus.FAILED -> Color(0xFFEF5350)
+    UploadStatus.QUEUED -> Color(0xFF616161)
+    UploadStatus.UPLOADING -> Color(0xFF0277BD)
+    UploadStatus.DONE -> Color(0xFF2E7D32)
+    UploadStatus.FAILED -> Color(0xFFC62828)
 }
 
 private fun remember0() = SimpleDateFormat("dd/MM HH:mm:ss", Locale.UK)
