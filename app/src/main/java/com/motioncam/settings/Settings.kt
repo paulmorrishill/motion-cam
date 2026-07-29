@@ -7,8 +7,9 @@ data class Settings(
     val resolutionWidth: Int = 1920,
     val resolutionHeight: Int = 1080,
     val motionSensitivity: Int = 50,        // 0..100
-    // Recorded-video rotation in degrees: 0/90/180/270, or -1 = auto (from device rotation).
-    val videoRotationDegrees: Int = -1,
+    // Recorded-video rotation in degrees. Default 0 = always landscape (never portrait).
+    // 180 = landscape upside-down; 90/270 = portrait; -1 = auto (from device rotation).
+    val videoRotationDegrees: Int = 0,
     val noMotionTimeoutSec: Int = 60,
     val maxFileSizeMb: Int = 1900,          // ~2GB rollover
     val ftpHost: String = "",

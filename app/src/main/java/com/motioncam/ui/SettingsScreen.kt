@@ -65,7 +65,7 @@ fun SettingsScreen(activity: MainActivity, onBack: () -> Unit) {
         }
         Text("Motion sensitivity: ${sensitivity.toInt()}")
         Slider(value = sensitivity, onValueChange = { sensitivity = it }, valueRange = 0f..100f)
-        numField("Video rotation deg (-1=auto, 0/90/180/270)", videoRot) { videoRot = it }
+        numField("Video rotation deg (0=landscape, 180=flip, 90/270=portrait, -1=auto)", videoRot) { videoRot = it }
         numField("No-motion timeout (sec)", timeout) { timeout = it }
         numField("Max file size (MB)", maxSize) { maxSize = it }
 
