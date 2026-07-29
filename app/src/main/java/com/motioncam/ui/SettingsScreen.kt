@@ -36,6 +36,7 @@ fun SettingsScreen(activity: MainActivity, onBack: () -> Unit) {
     var resW by remember { mutableStateOf(initial.resolutionWidth.toString()) }
     var resH by remember { mutableStateOf(initial.resolutionHeight.toString()) }
     var sensitivity by remember { mutableStateOf(initial.motionSensitivity.toFloat()) }
+    var videoRot by remember { mutableStateOf(initial.videoRotationDegrees.toString()) }
     var timeout by remember { mutableStateOf(initial.noMotionTimeoutSec.toString()) }
     var maxSize by remember { mutableStateOf(initial.maxFileSizeMb.toString()) }
     var ftpHost by remember { mutableStateOf(initial.ftpHost) }
@@ -64,6 +65,7 @@ fun SettingsScreen(activity: MainActivity, onBack: () -> Unit) {
         }
         Text("Motion sensitivity: ${sensitivity.toInt()}")
         Slider(value = sensitivity, onValueChange = { sensitivity = it }, valueRange = 0f..100f)
+        numField("Video rotation deg (-1=auto, 0/90/180/270)", videoRot) { videoRot = it }
         numField("No-motion timeout (sec)", timeout) { timeout = it }
         numField("Max file size (MB)", maxSize) { maxSize = it }
 
@@ -95,6 +97,7 @@ fun SettingsScreen(activity: MainActivity, onBack: () -> Unit) {
                             resolutionWidth = resW.toIntOrNull() ?: s.resolutionWidth,
                             resolutionHeight = resH.toIntOrNull() ?: s.resolutionHeight,
                             motionSensitivity = sensitivity.toInt(),
+                            videoRotationDegrees = videoRot.toIntOrNull() ?: s.videoRotationDegrees,
                             noMotionTimeoutSec = timeout.toIntOrNull() ?: s.noMotionTimeoutSec,
                             maxFileSizeMb = maxSize.toIntOrNull() ?: s.maxFileSizeMb,
                             ftpHost = ftpHost.trim(),

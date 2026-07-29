@@ -209,8 +209,14 @@ class CameraService : Service(), CameraController.Callbacks {
         val file = makeRecordingFile()
         recordingStartTime = now
         val maxBytes = settings.current.maxFileSizeMb.toLong() * 1024L * 1024L
-        val hint = controller.orientationHint(currentDisplayRotation())
-        L.i("Rec", "start ${file.name} hint=$hint max=${settings.current.maxFileSizeMb}MB")
+        val configuredRot = settings.current.videoRotationDegrees
+        val hint = if (configuredRot in intArrayOf(0, 90, 180, 270)) configuredRot
+        else controller.orientationHint(currentDisplayRotation())
+        L.i(
+            "Rec",
+            "start ${file.name} size=${controller.recordingSize.width}x${controller.recordingSize.height} " +
+                "hint=$hint (configured=$configuredRot) max=${settings.current.maxFileSizeMb}MB"
+        )
         controller.startRecording(file, maxBytes, hint)
         beeper.recordingStarted()
         AppState.update {

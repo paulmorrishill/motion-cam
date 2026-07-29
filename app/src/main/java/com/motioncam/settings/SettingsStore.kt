@@ -27,6 +27,7 @@ class SettingsStore private constructor(context: Context) {
             resolutionWidth = prefs.getInt(K_RES_W, d.resolutionWidth),
             resolutionHeight = prefs.getInt(K_RES_H, d.resolutionHeight),
             motionSensitivity = prefs.getInt(K_SENS, d.motionSensitivity),
+            videoRotationDegrees = prefs.getInt(K_VID_ROT, d.videoRotationDegrees),
             noMotionTimeoutSec = prefs.getInt(K_TIMEOUT, d.noMotionTimeoutSec),
             maxFileSizeMb = prefs.getInt(K_MAXSIZE, d.maxFileSizeMb),
             ftpHost = prefs.getString(K_FTP_HOST, d.ftpHost) ?: d.ftpHost,
@@ -47,6 +48,7 @@ class SettingsStore private constructor(context: Context) {
             .putInt(K_RES_W, next.resolutionWidth)
             .putInt(K_RES_H, next.resolutionHeight)
             .putInt(K_SENS, next.motionSensitivity)
+            .putInt(K_VID_ROT, next.videoRotationDegrees)
             .putInt(K_TIMEOUT, next.noMotionTimeoutSec)
             .putInt(K_MAXSIZE, next.maxFileSizeMb)
             .putString(K_FTP_HOST, next.ftpHost)
@@ -66,6 +68,7 @@ class SettingsStore private constructor(context: Context) {
         private const val K_RES_W = "res_w"
         private const val K_RES_H = "res_h"
         private const val K_SENS = "sensitivity"
+        private const val K_VID_ROT = "video_rotation_deg"
         private const val K_TIMEOUT = "no_motion_timeout"
         private const val K_MAXSIZE = "max_file_mb"
         private const val K_FTP_HOST = "ftp_host"
