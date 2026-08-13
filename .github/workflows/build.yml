@@ -144,5 +144,7 @@ jobs:
             Automated build of MotionCam.
             Install **motion-cam-release.apk** on the phone (allow install from unknown sources).
             Built from commit ${{ github.sha }}.
-          files: dist/*.apk
+          files: |
+            dist/*.apk
+            tools/qr-config.html
           make_latest: true
