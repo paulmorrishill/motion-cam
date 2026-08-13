@@ -66,6 +66,9 @@ fun MotionCamRoot(serviceProvider: () -> CameraService?, activity: MainActivity)
     // Settings values seeded from a just-scanned config QR (unsaved, editable). Null
     // means the Settings screen shows the persisted values.
     var scannedDraft by remember { mutableStateOf<Settings?>(null) }
+    // Last rejected payload, so a non-config QR held in frame doesn't spam identical
+    // toasts as it re-decodes every interval.
+    var lastRejected by remember { mutableStateOf<String?>(null) }
 
     // A successful QR decode arrives via AppState.scannedConfig. Parse it: a valid
     // MotionCam payload seeds the Settings screen for review; anything else (a random
@@ -74,10 +77,14 @@ fun MotionCamRoot(serviceProvider: () -> CameraService?, activity: MainActivity)
         val payload = ui.scannedConfig ?: return@LaunchedEffect
         try {
             scannedDraft = SettingsCodec.decode(payload, store.current)
+            lastRejected = null
             service?.consumeScannedConfig()
             screen = Screen.SETTINGS
         } catch (e: IllegalArgumentException) {
-            Toast.makeText(context, "Not a MotionCam config QR", Toast.LENGTH_SHORT).show()
+            if (payload != lastRejected) {
+                lastRejected = payload
+                Toast.makeText(context, "Not a MotionCam config QR", Toast.LENGTH_SHORT).show()
+            }
             service?.beginConfigScan() // clears the bad payload and keeps scanning
         }
     }

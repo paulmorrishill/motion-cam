@@ -67,6 +67,18 @@ class SettingsCodecTest {
         SettingsCodec.decode("""["a","b"]""", Settings())
     }
 
+    @Test(expected = IllegalArgumentException::class)
+    fun decode_jsonObjectWithoutVersion_throwsIllegalArgument() {
+        // A valid JSON object that is not one of our payloads must be rejected, not
+        // silently merged onto current.
+        SettingsCodec.decode("""{"deviceName":"cam","foo":1}""", Settings())
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun decode_unsupportedVersion_throwsIllegalArgument() {
+        SettingsCodec.decode("""{"_v":2,"deviceName":"cam"}""", Settings())
+    }
+
     @Test
     fun decode_wrongTypedField_keepsCurrentValue() {
         // ftpPort given as a non-numeric string must not crash; falls back to current.

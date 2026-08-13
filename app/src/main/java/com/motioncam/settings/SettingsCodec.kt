@@ -69,6 +69,11 @@ object SettingsCodec {
         } catch (e: JSONException) {
             throw IllegalArgumentException("Not a valid config QR payload", e)
         }
+        // Require our version marker so an arbitrary QR (any JSON object, or a future
+        // incompatible schema) is rejected rather than silently merged onto current.
+        if (o.optInt(K_V, -1) != VERSION) {
+            throw IllegalArgumentException("Not a MotionCam config QR (version ${o.opt(K_V)})")
+        }
         return current.copy(
             deviceName = o.optString(K_DEVICE, current.deviceName),
             resolutionWidth = o.optInt(K_RES_W, current.resolutionWidth),

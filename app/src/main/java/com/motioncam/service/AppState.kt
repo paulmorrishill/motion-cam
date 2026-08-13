@@ -5,6 +5,7 @@ import com.motioncam.upload.UploadItem
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 enum class TorchMode { OFF, AUTO, ON }
 
@@ -62,7 +63,10 @@ object AppState {
     val state: StateFlow<UiState> = _state.asStateFlow()
 
     fun update(transform: (UiState) -> UiState) {
-        _state.value = transform(_state.value)
+        // Atomic read-modify-write: the scan result is delivered from the analysis
+        // thread while other threads (battery/storage/torch) also update, and a plain
+        // value assignment could drop a concurrent write (losing a scanned payload).
+        _state.update(transform)
     }
 
     fun snapshot(): UiState = _state.value

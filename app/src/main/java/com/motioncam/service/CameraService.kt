@@ -60,6 +60,11 @@ class CameraService : Service(), CameraController.Callbacks {
     // Set on the UI thread, read on the analysis thread; volatile is enough (single
     // writer flips it, the analysis loop only reads and flips it back off on a hit).
     @Volatile private var scanningConfig = false
+    // Throttle QR decoding: at preview frame rate a TRY_HARDER decode per frame would
+    // load the single analysis thread; one attempt per interval is plenty to catch a
+    // held-up code. Accessed only on the analysis thread.
+    private var lastScanAttemptMs = 0L
+    private val scanIntervalMs = 150L
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val analysis = Executors.newSingleThreadExecutor()
@@ -177,11 +182,15 @@ class CameraService : Service(), CameraController.Callbacks {
     override fun onMotionLuma(luma: ByteArray, width: Int, height: Int, rowStride: Int) {
         analysis.execute {
             if (scanningConfig) {
-                val text = qrScanner.decode(luma, width, height, rowStride)
-                if (text != null) {
-                    scanningConfig = false
-                    L.i("Scan", "config QR decoded (${text.length} chars)")
-                    AppState.update { it.copy(scanning = false, scannedConfig = text) }
+                val nowMs = System.currentTimeMillis()
+                if (nowMs - lastScanAttemptMs >= scanIntervalMs) {
+                    lastScanAttemptMs = nowMs
+                    val text = qrScanner.decode(luma, width, height, rowStride)
+                    if (text != null) {
+                        scanningConfig = false
+                        L.i("Scan", "config QR decoded (${text.length} chars)")
+                        AppState.update { it.copy(scanning = false, scannedConfig = text) }
+                    }
                 }
             }
             val result = detector.submit(luma, width, height, rowStride)
@@ -371,10 +380,12 @@ class CameraService : Service(), CameraController.Callbacks {
         AppState.update { it.copy(scanning = true, scannedConfig = null) }
     }
 
-    /** Stop scanning without a result (user cancelled). */
+    /** Stop scanning without a result (user cancelled). Also drop any payload a decode
+     *  may have published in the same instant, so a cancelled scan never bounces the
+     *  user into a QR-seeded Settings screen. */
     fun cancelConfigScan() {
         scanningConfig = false
-        AppState.update { it.copy(scanning = false) }
+        AppState.update { it.copy(scanning = false, scannedConfig = null) }
     }
 
     /** Clear a delivered scan payload once the UI has consumed it. */
