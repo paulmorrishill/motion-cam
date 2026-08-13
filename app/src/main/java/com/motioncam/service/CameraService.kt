@@ -16,6 +16,7 @@ import android.view.Surface
 import androidx.core.app.NotificationCompat
 import com.motioncam.MotionCamApp
 import com.motioncam.camera.CameraController
+import com.motioncam.camera.QrScanner
 import com.motioncam.motion.MotionDetector
 import com.motioncam.settings.SettingsStore
 import com.motioncam.ui.MainActivity
@@ -54,6 +55,11 @@ class CameraService : Service(), CameraController.Callbacks {
 
     private val detector = MotionDetector()
     private val stateMachine = RecorderStateMachine(60_000L)
+
+    private val qrScanner = QrScanner()
+    // Set on the UI thread, read on the analysis thread; volatile is enough (single
+    // writer flips it, the analysis loop only reads and flips it back off on a hit).
+    @Volatile private var scanningConfig = false
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val analysis = Executors.newSingleThreadExecutor()
@@ -170,6 +176,14 @@ class CameraService : Service(), CameraController.Callbacks {
 
     override fun onMotionLuma(luma: ByteArray, width: Int, height: Int, rowStride: Int) {
         analysis.execute {
+            if (scanningConfig) {
+                val text = qrScanner.decode(luma, width, height, rowStride)
+                if (text != null) {
+                    scanningConfig = false
+                    L.i("Scan", "config QR decoded (${text.length} chars)")
+                    AppState.update { it.copy(scanning = false, scannedConfig = text) }
+                }
+            }
             val result = detector.submit(luma, width, height, rowStride)
             val now = System.currentTimeMillis()
             if (result.motion) lastMotionTime = now
@@ -349,6 +363,23 @@ class CameraService : Service(), CameraController.Callbacks {
     fun resetZoom() {
         controller.setZoom(1f)
         AppState.update { it.copy(zoomRatio = 1f, maxZoom = controller.maxZoom) }
+    }
+
+    /** Start decoding config QR codes off the preview stream. */
+    fun beginConfigScan() {
+        scanningConfig = true
+        AppState.update { it.copy(scanning = true, scannedConfig = null) }
+    }
+
+    /** Stop scanning without a result (user cancelled). */
+    fun cancelConfigScan() {
+        scanningConfig = false
+        AppState.update { it.copy(scanning = false) }
+    }
+
+    /** Clear a delivered scan payload once the UI has consumed it. */
+    fun consumeScannedConfig() {
+        AppState.update { it.copy(scannedConfig = null) }
     }
 
     fun stopOrDisarm() {

@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -35,24 +36,51 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.widget.Toast
 import com.motioncam.service.AppState
 import com.motioncam.service.CameraService
 import com.motioncam.service.KeepScreenMode
 import com.motioncam.service.RecorderStateMachine
 import com.motioncam.service.TorchMode
+import com.motioncam.settings.Settings
+import com.motioncam.settings.SettingsCodec
+import com.motioncam.settings.SettingsStore
 import kotlinx.coroutines.delay
 
-private enum class Screen { MAIN, SETTINGS, UPLOADS }
+private enum class Screen { MAIN, SETTINGS, UPLOADS, SCAN }
 
 @Composable
 fun MotionCamRoot(serviceProvider: () -> CameraService?, activity: MainActivity) {
     val ui by AppState.state.collectAsState()
     val service = serviceProvider()
+    val context = LocalContext.current
+    val store = remember { SettingsStore.get(context) }
     var screen by remember { mutableStateOf(Screen.MAIN) }
+
+    // Settings values seeded from a just-scanned config QR (unsaved, editable). Null
+    // means the Settings screen shows the persisted values.
+    var scannedDraft by remember { mutableStateOf<Settings?>(null) }
+
+    // A successful QR decode arrives via AppState.scannedConfig. Parse it: a valid
+    // MotionCam payload seeds the Settings screen for review; anything else (a random
+    // QR) is rejected and scanning resumes.
+    LaunchedEffect(ui.scannedConfig) {
+        val payload = ui.scannedConfig ?: return@LaunchedEffect
+        try {
+            scannedDraft = SettingsCodec.decode(payload, store.current)
+            service?.consumeScannedConfig()
+            screen = Screen.SETTINGS
+        } catch (e: IllegalArgumentException) {
+            Toast.makeText(context, "Not a MotionCam config QR", Toast.LENGTH_SHORT).show()
+            service?.beginConfigScan() // clears the bad payload and keeps scanning
+        }
+    }
 
     // Keep-screen state lives at the root so it survives navigating to Settings/
     // Uploads and back (otherwise the user's screen choice would reset each time).
@@ -83,12 +111,71 @@ fun MotionCamRoot(serviceProvider: () -> CameraService?, activity: MainActivity)
             Screen.SETTINGS -> Surface(
                 Modifier.fillMaxSize(),
                 color = MaterialTheme.colorScheme.background
-            ) { SettingsScreen(activity = activity, onBack = { screen = Screen.MAIN }) }
+            ) {
+                SettingsScreen(
+                    activity = activity,
+                    initialOverride = scannedDraft,
+                    onScan = {
+                        service?.beginConfigScan()
+                        screen = Screen.SCAN
+                    },
+                    onBack = {
+                        scannedDraft = null
+                        screen = Screen.MAIN
+                    }
+                )
+            }
             Screen.UPLOADS -> Surface(
                 Modifier.fillMaxSize(),
                 color = MaterialTheme.colorScheme.background
             ) { UploadsScreen(ui = ui, onBack = { screen = Screen.MAIN }) }
+            // Transparent overlay over the live preview so the user can aim at the QR.
+            Screen.SCAN -> ScanOverlay(onCancel = {
+                service?.cancelConfigScan()
+                screen = Screen.SETTINGS
+            })
             Screen.MAIN -> Unit
+        }
+    }
+}
+
+@Composable
+private fun ScanOverlay(onCancel: () -> Unit) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .testTag("scan_overlay")
+            .background(Color(0x99000000)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            Modifier
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                "Point the camera at the config QR code",
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+                textAlign = TextAlign.Center
+            )
+            // Framing reticle.
+            Box(
+                Modifier
+                    .width(220.dp)
+                    .height(220.dp)
+                    .background(Color(0x22FFFFFF))
+            )
+            Text(
+                "Generate the code from tools/qr-config.html",
+                color = Color(0xCCFFFFFF),
+                fontSize = 13.sp,
+                textAlign = TextAlign.Center
+            )
+            Button(onClick = onCancel) { Text("Cancel") }
         }
     }
 }

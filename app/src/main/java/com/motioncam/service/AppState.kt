@@ -30,6 +30,11 @@ data class UiState(
     val batteryPercent: Int = 100,
     val cameraError: String? = null,
     val serviceRunning: Boolean = false,
+    // Config-QR scan: true while the service is decoding QR codes off the preview
+    // stream; scannedConfig holds the raw payload of the most recent successful decode
+    // (consumed by the UI, then cleared).
+    val scanning: Boolean = false,
+    val scannedConfig: String? = null,
     val uploadQueue: List<UploadItem> = emptyList(),
     val recentFiles: List<RecentFile> = emptyList()
 ) {
