@@ -25,6 +25,10 @@ data class UiState(
     val focusLocked: Boolean = false,
     val zoomRatio: Float = 1f,
     val maxZoom: Float = 1f,
+    // Current lens label ("Main"/"Wide") and how many selectable back lenses exist
+    // (the toggle button is only shown when > 1).
+    val lensLabel: String = "Main",
+    val lensCount: Int = 1,
     val storageLow: Boolean = false,
     val batteryLow: Boolean = false,
     val storageFreePercent: Int = 100,

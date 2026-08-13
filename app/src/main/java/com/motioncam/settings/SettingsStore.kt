@@ -37,7 +37,8 @@ class SettingsStore private constructor(context: Context) {
             ftpPath = prefs.getString(K_FTP_PATH, d.ftpPath) ?: d.ftpPath,
             storageLowPercent = prefs.getInt(K_STORAGE_LOW, d.storageLowPercent),
             batteryLowPercent = prefs.getInt(K_BATT_LOW, d.batteryLowPercent),
-            retentionDays = prefs.getInt(K_RETENTION, d.retentionDays)
+            retentionDays = prefs.getInt(K_RETENTION, d.retentionDays),
+            useUltraWide = prefs.getBoolean(K_ULTRA_WIDE, d.useUltraWide)
         )
     }
 
@@ -59,6 +60,7 @@ class SettingsStore private constructor(context: Context) {
             .putInt(K_STORAGE_LOW, next.storageLowPercent)
             .putInt(K_BATT_LOW, next.batteryLowPercent)
             .putInt(K_RETENTION, next.retentionDays)
+            .putBoolean(K_ULTRA_WIDE, next.useUltraWide)
             .apply()
         _flow.value = next
     }
@@ -79,6 +81,7 @@ class SettingsStore private constructor(context: Context) {
         private const val K_STORAGE_LOW = "storage_low_pct"
         private const val K_BATT_LOW = "batt_low_pct"
         private const val K_RETENTION = "retention_days"
+        private const val K_ULTRA_WIDE = "use_ultra_wide"
 
         @Volatile
         private var instance: SettingsStore? = null

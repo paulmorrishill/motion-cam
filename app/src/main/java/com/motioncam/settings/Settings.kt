@@ -20,7 +20,10 @@ data class Settings(
     val ftpPath: String = "/",
     val storageLowPercent: Int = 10,
     val batteryLowPercent: Int = 30,
-    val retentionDays: Int = 7
+    val retentionDays: Int = 7,
+    // Device-specific lens choice (toggled live on the preview, not shared via QR):
+    // open the ultra-wide back camera instead of the main one.
+    val useUltraWide: Boolean = false
 ) {
     val resolutionIsAuto: Boolean get() = resolutionWidth <= 0 || resolutionHeight <= 0
     val ftpConfigured: Boolean get() = ftpHost.isNotBlank()

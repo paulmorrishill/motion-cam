@@ -308,6 +308,13 @@ private fun MainScreen(
                 active = keepMode != KeepScreenMode.OFF,
                 onClick = { setKeepMode(keepMode.next()) }
             )
+            if (ui.lensCount > 1) {
+                ControlButton(
+                    label = "Lens: ${ui.lensLabel}",
+                    active = ui.lensLabel != "Main",
+                    onClick = { service?.cycleLens() }
+                )
+            }
             if (ui.maxZoom > 1f) {
                 ControlButton(
                     label = "Zoom ${"%.1f".format(ui.zoomRatio)}x",

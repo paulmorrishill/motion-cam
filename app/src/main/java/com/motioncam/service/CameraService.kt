@@ -16,6 +16,7 @@ import android.view.Surface
 import androidx.core.app.NotificationCompat
 import com.motioncam.MotionCamApp
 import com.motioncam.camera.CameraController
+import com.motioncam.camera.LensChooser
 import com.motioncam.camera.QrScanner
 import com.motioncam.motion.MotionDetector
 import com.motioncam.motion.MotionGate
@@ -56,6 +57,10 @@ class CameraService : Service(), CameraController.Callbacks {
 
     private val detector = MotionDetector()
     private val stateMachine = RecorderStateMachine(60_000L)
+
+    // Available lens toggle (Main / ultra-wide) and the currently selected index.
+    private var lensToggle: List<LensChooser.Lens> = emptyList()
+    private var currentLensIndex = 0
 
     private val qrScanner = QrScanner()
     // Set on the UI thread, read on the analysis thread; volatile is enough (single
@@ -128,7 +133,14 @@ class CameraService : Service(), CameraController.Callbacks {
         val s = settings.current
         val desired = if (s.resolutionIsAuto) null
         else android.util.Size(s.resolutionWidth, s.resolutionHeight)
-        controller.open(desired)
+
+        // Work out the available lenses (Main / ultra-wide) and open the saved choice.
+        lensToggle = LensChooser.toggleLenses(controller.defaultBackCameraId(), controller.backLenses())
+        currentLensIndex = if (s.useUltraWide && lensToggle.size > 1) 1 else 0
+        controller.open(desired, lensToggle[currentLensIndex].cameraId)
+        AppState.update {
+            it.copy(lensLabel = lensToggle[currentLensIndex].label, lensCount = lensToggle.size)
+        }
 
         uploads.start()
         startTicker()
@@ -372,6 +384,34 @@ class CameraService : Service(), CameraController.Callbacks {
     fun resetZoom() {
         controller.setZoom(1f)
         AppState.update { it.copy(zoomRatio = 1f, maxZoom = controller.maxZoom) }
+    }
+
+    /** Toggle to the next lens (Main <-> ultra-wide) and persist the choice. */
+    fun cycleLens() {
+        if (lensToggle.size < 2) return
+        currentLensIndex = (currentLensIndex + 1) % lensToggle.size
+        val lens = lensToggle[currentLensIndex]
+        L.i("Lens", "switch to ${lens.label} (camera ${lens.cameraId})")
+        controller.switchCamera(lens.cameraId)
+        settings.update { it.copy(useUltraWide = currentLensIndex != 0) }
+        // switchCamera finalises any in-progress recording but reopens in preview-only
+        // mode, so re-arm the recorder on the analysis thread: otherwise the state
+        // machine stays RECORDING (phantom recording in the UI) and motion on the new
+        // lens is never captured. Resetting motionPresent + the gate is required because
+        // motion presence is sticky (only acted on when it changes).
+        analysis.execute {
+            stateMachine.forceArm()
+            motionPresent = false
+            motionGate.reset()
+            AppState.update {
+                it.copy(
+                    lensLabel = lens.label,
+                    zoomRatio = 1f,
+                    recorderState = stateMachine.state,
+                    currentFileName = null
+                )
+            }
+        }
     }
 
     /** Start decoding config QR codes off the preview stream. */
