@@ -95,6 +95,10 @@ dependencies {
     // Plain (unsecured) FTP client for local-network sync.
     implementation("commons-net:commons-net:3.11.1")
 
+    // Pure-Java QR decode/encode. Used to decode config QR codes directly off the
+    // existing camera luma stream (no second camera client), and to round-trip test it.
+    implementation("com.google.zxing:core:3.5.3")
+
     // Crash / error reporting.
     implementation("io.sentry:sentry-android:8.50.1")
 
