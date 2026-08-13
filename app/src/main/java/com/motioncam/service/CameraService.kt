@@ -18,6 +18,7 @@ import com.motioncam.MotionCamApp
 import com.motioncam.camera.CameraController
 import com.motioncam.camera.QrScanner
 import com.motioncam.motion.MotionDetector
+import com.motioncam.motion.MotionGate
 import com.motioncam.settings.SettingsStore
 import com.motioncam.ui.MainActivity
 import com.motioncam.upload.UploadManager
@@ -69,9 +70,9 @@ class CameraService : Service(), CameraController.Callbacks {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val analysis = Executors.newSingleThreadExecutor()
 
-    // Motion smoothing: a motion frame keeps "present" true for this long.
-    private val motionHoldMs = 800L
-    private var lastMotionTime = 0L
+    // Debounce raw per-frame motion so a lone low-light noise spike can't start a
+    // recording; motion must be sustained (see MotionGate) before it counts.
+    private val motionGate = MotionGate()
     private var motionPresent = false
 
     private var recordingStartTime = 0L
@@ -159,7 +160,7 @@ class CameraService : Service(), CameraController.Callbacks {
     private fun onTick() {
         val now = System.currentTimeMillis()
         // Recompute motion presence (it decays even without new frames).
-        val present = (now - lastMotionTime) < motionHoldMs
+        val present = motionGate.present(now)
         if (present != motionPresent) applyMotionChange(present, now)
 
         handleActions(stateMachine.onTick(now), now)
@@ -195,8 +196,7 @@ class CameraService : Service(), CameraController.Callbacks {
             }
             val result = detector.submit(luma, width, height, rowStride)
             val now = System.currentTimeMillis()
-            if (result.motion) lastMotionTime = now
-            val present = (now - lastMotionTime) < motionHoldMs
+            val present = motionGate.onFrame(result.motion, now)
             if (present != motionPresent) applyMotionChange(present, now)
         }
     }
