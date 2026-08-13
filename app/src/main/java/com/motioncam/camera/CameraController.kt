@@ -104,9 +104,6 @@ class CameraController(private val context: Context) {
     // Remembered so a live lens switch can re-select sizes for the new camera.
     private var desiredRecording: Size? = null
 
-    /** The camera id currently in use, or null before [open]. */
-    val activeCameraId: String? get() = if (::cameraId.isInitialized) cameraId else null
-
     @SuppressLint("MissingPermission")
     fun open(desiredRecording: Size?, startCameraId: String? = null) {
         this.desiredRecording = desiredRecording
@@ -660,6 +657,9 @@ class CameraController(private val context: Context) {
     /** Release the camera device, session, recorder and motion reader — WITHOUT
      *  stopping the camera thread, so it can be reused by a live [switchCamera]. */
     private fun releaseDevice() {
+        // Invalidate any in-flight capture-session configuration so a stale onConfigured
+        // callback for the old device is dropped rather than assigning a dead session.
+        ++sessionGeneration
         try {
             if (recording && recorderStarted) recorder?.stop()
         } catch (_: Exception) {

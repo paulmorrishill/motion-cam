@@ -394,7 +394,24 @@ class CameraService : Service(), CameraController.Callbacks {
         L.i("Lens", "switch to ${lens.label} (camera ${lens.cameraId})")
         controller.switchCamera(lens.cameraId)
         settings.update { it.copy(useUltraWide = currentLensIndex != 0) }
-        AppState.update { it.copy(lensLabel = lens.label, zoomRatio = 1f) }
+        // switchCamera finalises any in-progress recording but reopens in preview-only
+        // mode, so re-arm the recorder on the analysis thread: otherwise the state
+        // machine stays RECORDING (phantom recording in the UI) and motion on the new
+        // lens is never captured. Resetting motionPresent + the gate is required because
+        // motion presence is sticky (only acted on when it changes).
+        analysis.execute {
+            stateMachine.forceArm()
+            motionPresent = false
+            motionGate.reset()
+            AppState.update {
+                it.copy(
+                    lensLabel = lens.label,
+                    zoomRatio = 1f,
+                    recorderState = stateMachine.state,
+                    currentFileName = null
+                )
+            }
+        }
     }
 
     /** Start decoding config QR codes off the preview stream. */
