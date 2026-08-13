@@ -155,6 +155,27 @@ private fun ScanOverlay(onCancel: () -> Unit) {
             .background(Color(0x99000000)),
         contentAlignment = Alignment.Center
     ) {
+        // Always-visible close (✕) pinned top-right, so the scanner can be dismissed
+        // from anywhere on the screen even if the centred controls are off-view.
+        Surface(
+            color = Color(0xCC000000),
+            shape = androidx.compose.foundation.shape.CircleShape,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .padding(12.dp)
+                .testTag("scan_close")
+                .clickable { onCancel() }
+        ) {
+            Text(
+                "✕",
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = 22.sp,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+            )
+        }
+
         Column(
             Modifier
                 .windowInsetsPadding(WindowInsets.statusBars)
