@@ -101,10 +101,17 @@ class CameraController(private val context: Context) {
 
     // ---- lifecycle ----
 
+    // Remembered so a live lens switch can re-select sizes for the new camera.
+    private var desiredRecording: Size? = null
+
+    /** The camera id currently in use, or null before [open]. */
+    val activeCameraId: String? get() = if (::cameraId.isInitialized) cameraId else null
+
     @SuppressLint("MissingPermission")
-    fun open(desiredRecording: Size?) {
+    fun open(desiredRecording: Size?, startCameraId: String? = null) {
+        this.desiredRecording = desiredRecording
         try {
-            cameraId = pickBackCamera()
+            cameraId = startCameraId ?: pickBackCamera()
             characteristics = cameraManager.getCameraCharacteristics(cameraId)
             selectSizes(desiredRecording)
             createMotionReader()
@@ -112,6 +119,55 @@ class CameraController(private val context: Context) {
         } catch (e: Exception) {
             callbacks?.onError("open: ${e.message}")
         }
+    }
+
+    /**
+     * Switch to another (back) camera live — used to toggle Main <-> ultra-wide, since
+     * ultra-wide is a separate camera, not a sub-1.0 zoom. Finalises any recording in
+     * progress, releases the current device and reopens the requested one; the stored
+     * preview surface is reused so the preview returns automatically.
+     */
+    @SuppressLint("MissingPermission")
+    fun switchCamera(newCameraId: String) {
+        cameraHandler.post {
+            if (::cameraId.isInitialized && device != null && newCameraId == cameraId) return@post
+            if (recording) finishRecording(interrupted = false, rebuildSession = false)
+            releaseDevice()
+            try {
+                cameraId = newCameraId
+                characteristics = cameraManager.getCameraCharacteristics(newCameraId)
+                zoomRatio = 1f
+                focusLocked = false
+                focusRegion = null
+                selectSizes(desiredRecording)
+                createMotionReader()
+                cameraManager.openCamera(newCameraId, deviceStateCallback, cameraHandler)
+            } catch (e: Exception) {
+                callbacks?.onError("switchCamera: ${e.message}")
+            }
+        }
+    }
+
+    /** Openable back cameras with their shortest focal length, for lens selection. */
+    fun backLenses(): List<LensChooser.BackLens> = try {
+        cameraManager.cameraIdList.mapNotNull { id ->
+            val ch = cameraManager.getCameraCharacteristics(id)
+            if (ch.get(CameraCharacteristics.LENS_FACING) != CameraCharacteristics.LENS_FACING_BACK) {
+                return@mapNotNull null
+            }
+            val focal = ch.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.minOrNull()
+                ?: return@mapNotNull null
+            LensChooser.BackLens(id, focal)
+        }
+    } catch (e: Exception) {
+        emptyList()
+    }
+
+    /** The device's primary back camera id (the default lens). */
+    fun defaultBackCameraId(): String = try {
+        pickBackCamera()
+    } catch (e: Exception) {
+        cameraManager.cameraIdList.firstOrNull() ?: "0"
     }
 
     private fun pickBackCamera(): String {
@@ -485,7 +541,7 @@ class CameraController(private val context: Context) {
      * started and is non-empty; deletes empty/aborted files so they are never
      * uploaded. [interrupted] true means an unexpected end (max size reached).
      */
-    private fun finishRecording(interrupted: Boolean) {
+    private fun finishRecording(interrupted: Boolean, rebuildSession: Boolean = true) {
         if (!recording && !interrupted) return
         recording = false
         pendingRecorderStart = false
@@ -509,7 +565,9 @@ class CameraController(private val context: Context) {
         // Discard a pre-created next segment that never started recording.
         rollover.pendingFile?.let { if (it.exists() && it.length() == 0L) it.delete() }
         rollover.reset()
-        createSession() // rebuild without the recorder surface
+        // Rebuild the preview session without the recorder surface. Skipped by a live
+        // camera switch, which is about to release the device entirely.
+        if (rebuildSession) createSession()
 
         if (stoppedCleanly && finished != null && finished.length() > 0L) {
             callbacks?.onRecordingFileCompleted(finished)
@@ -595,32 +653,36 @@ class CameraController(private val context: Context) {
     }
 
     fun close() {
-        cameraHandler.post {
-            try {
-                if (recording && recorderStarted) recorder?.stop()
-            } catch (_: Exception) {
-            }
-            recording = false
-            recorderStarted = false
-            try {
-                recorder?.release()
-            } catch (_: Exception) {
-            }
-            recorder = null
-            try {
-                session?.close()
-            } catch (_: Exception) {
-            }
-            session = null
-            try {
-                device?.close()
-            } catch (_: Exception) {
-            }
-            device = null
-            motionReader?.close()
-            motionReader = null
-        }
+        cameraHandler.post { releaseDevice() }
         cameraThread.quitSafely()
+    }
+
+    /** Release the camera device, session, recorder and motion reader — WITHOUT
+     *  stopping the camera thread, so it can be reused by a live [switchCamera]. */
+    private fun releaseDevice() {
+        try {
+            if (recording && recorderStarted) recorder?.stop()
+        } catch (_: Exception) {
+        }
+        recording = false
+        recorderStarted = false
+        try {
+            recorder?.release()
+        } catch (_: Exception) {
+        }
+        recorder = null
+        try {
+            session?.close()
+        } catch (_: Exception) {
+        }
+        session = null
+        try {
+            device?.close()
+        } catch (_: Exception) {
+        }
+        device = null
+        motionReader?.close()
+        motionReader = null
     }
 
     companion object {
