@@ -27,12 +27,20 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.motioncam.settings.Settings
 import com.motioncam.settings.SettingsStore
 
 @Composable
-fun SettingsScreen(activity: MainActivity, onBack: () -> Unit) {
+fun SettingsScreen(
+    activity: MainActivity,
+    onScan: () -> Unit,
+    onBack: () -> Unit,
+    initialOverride: Settings? = null
+) {
     val store = remember { SettingsStore.get(activity) }
-    val initial = remember { store.current }
+    // When a config QR has just been scanned, seed the fields from it (still unsaved
+    // and fully editable) instead of the persisted values.
+    val initial = remember { initialOverride ?: store.current }
 
     var deviceName by remember { mutableStateOf(initial.deviceName) }
     var resW by remember { mutableStateOf(initial.resolutionWidth.toString()) }
@@ -59,6 +67,17 @@ fun SettingsScreen(activity: MainActivity, onBack: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Text("Settings", style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
+
+        Button(onClick = onScan, modifier = Modifier.fillMaxWidth()) {
+            Text("Scan config QR")
+        }
+        if (initialOverride != null) {
+            Text(
+                "Loaded from QR — review and Save to apply.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
 
         field("Device name", deviceName) { deviceName = it }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

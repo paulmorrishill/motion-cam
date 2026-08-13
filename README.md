@@ -66,6 +66,23 @@ unknown sources"). On first launch grant Camera, Microphone and Notification per
 then allow the app to ignore battery optimisation when prompted. Configure the device name
 and FTP server in **Settings**.
 
+## Configuration via QR code
+
+Every setting can be filled from a QR code instead of typed on the phone:
+
+1. Open [`tools/qr-config.html`](tools/qr-config.html) in any browser (double-click it — no
+   server needed, works offline). Fill in the settings; the QR updates live. Entries are
+   remembered in the browser's `localStorage`, so the form is pre-filled next time.
+2. On the phone: **Settings → Scan config QR**, point the camera at the code.
+3. The scanned values populate the Settings fields (still fully editable) — review, then
+   **Save** to apply.
+
+The QR carries a compact JSON payload (`app/.../settings/SettingsCodec.kt`). It is decoded
+directly off the existing camera preview stream (`QrScanner`), so no second camera is
+needed. A QR may carry only some fields — omitted ones keep their current value. Passwords
+travel in the QR as plain text (the FTP link is unencrypted LAN regardless), so only
+display the code on a trusted screen.
+
 ## CI
 
 `.github/workflows/build.yml`:
@@ -77,5 +94,6 @@ and FTP server in **Settings**.
 ## Tests
 
 - Unit: motion-detection algorithm, filename formatting, retention policy, recorder state
-  machine (`app/src/test`).
+  machine, config-QR codec + scanner, and a cross-tool interop test that decodes a QR the
+  HTML generator produced (`app/src/test`).
 - Instrumented: app-launch smoke test on an emulator (`app/src/androidTest`).
