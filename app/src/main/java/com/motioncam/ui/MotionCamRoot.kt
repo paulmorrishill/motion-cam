@@ -136,7 +136,14 @@ fun MotionCamRoot(serviceProvider: () -> CameraService?, activity: MainActivity)
             Screen.UPLOADS -> Surface(
                 Modifier.fillMaxSize(),
                 color = MaterialTheme.colorScheme.background
-            ) { UploadsScreen(ui = ui, onBack = { screen = Screen.MAIN }) }
+            ) {
+                UploadsScreen(
+                    ui = ui,
+                    onBack = { screen = Screen.MAIN },
+                    onTestFtp = { service?.testFtp() },
+                    onForceUpload = { service?.triggerUploads() }
+                )
+            }
             // Transparent overlay over the live preview so the user can aim at the QR.
             Screen.SCAN -> ScanOverlay(onCancel = {
                 service?.cancelConfigScan()

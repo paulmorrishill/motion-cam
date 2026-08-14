@@ -48,6 +48,21 @@ class UploadManager(
         triggers.trySend(Unit)
     }
 
+    /** Verify the current FTP settings (connect + login + writable dir), no upload. */
+    suspend fun testConnection(): FtpUploader.Result {
+        val cfg = settings.current
+        if (!cfg.ftpConfigured) return FtpUploader.Result.Failure("FTP host not set")
+        return uploader.test(
+            FtpUploader.Config(
+                host = cfg.ftpHost,
+                port = cfg.ftpPort,
+                user = cfg.ftpUser,
+                password = cfg.ftpPassword,
+                remoteDir = cfg.ftpPath
+            )
+        )
+    }
+
     private suspend fun processPass() = passLock.withLock {
         val cfg = settings.current
         val activeName = AppState.snapshot().currentFileName

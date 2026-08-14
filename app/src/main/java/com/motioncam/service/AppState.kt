@@ -45,7 +45,11 @@ data class UiState(
     val scanning: Boolean = false,
     val scannedConfig: String? = null,
     val uploadQueue: List<UploadItem> = emptyList(),
-    val recentFiles: List<RecentFile> = emptyList()
+    val recentFiles: List<RecentFile> = emptyList(),
+    // FTP connection test (from the Uploads screen button): true while probing;
+    // ftpTestResult holds the last human-readable outcome until dismissed/re-run.
+    val ftpTesting: Boolean = false,
+    val ftpTestResult: String? = null
 ) {
     /** Human-readable status shown at the top of the recording screen. */
     val statusText: String

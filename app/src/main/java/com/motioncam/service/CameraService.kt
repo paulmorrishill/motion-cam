@@ -22,6 +22,7 @@ import com.motioncam.motion.MotionDetector
 import com.motioncam.motion.MotionGate
 import com.motioncam.settings.SettingsStore
 import com.motioncam.ui.MainActivity
+import com.motioncam.upload.FtpUploader
 import com.motioncam.upload.UploadManager
 import com.motioncam.util.Beeper
 import com.motioncam.util.Filenames
@@ -464,6 +465,26 @@ class CameraService : Service(), CameraController.Callbacks {
 
     fun rearm() {
         analysis.execute { handleActions(stateMachine.onUserRearm(), System.currentTimeMillis()) }
+    }
+
+    /** Force an immediate upload pass (also runs retention). Files still need to be
+     *  >5s old and not the active recording to be picked up. */
+    fun triggerUploads() {
+        L.i("Upload", "manual queue trigger")
+        uploads.trigger()
+    }
+
+    /** Test the saved FTP settings without uploading a recording; result -> AppState. */
+    fun testFtp() {
+        AppState.update { it.copy(ftpTesting = true, ftpTestResult = null) }
+        scope.launch {
+            val msg = when (val r = uploads.testConnection()) {
+                is FtpUploader.Result.Success -> "FTP OK — connected and wrote a test file"
+                is FtpUploader.Result.Failure -> "FTP failed: ${r.message}"
+            }
+            L.i("Upload", "FTP test: $msg")
+            AppState.update { it.copy(ftpTesting = false, ftpTestResult = msg) }
+        }
     }
 
     fun cycleTorch() {

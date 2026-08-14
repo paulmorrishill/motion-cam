@@ -31,7 +31,12 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
-fun UploadsScreen(ui: UiState, onBack: () -> Unit) {
+fun UploadsScreen(
+    ui: UiState,
+    onBack: () -> Unit,
+    onTestFtp: () -> Unit = {},
+    onForceUpload: () -> Unit = {}
+) {
     Column(
         Modifier
             .fillMaxSize()
@@ -44,6 +49,30 @@ fun UploadsScreen(ui: UiState, onBack: () -> Unit) {
         ) {
             Text("Uploads", style = MaterialTheme.typography.headlineSmall)
             Button(onClick = onBack) { Text("Back") }
+        }
+
+        Row(
+            Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button(
+                onClick = onTestFtp,
+                enabled = !ui.ftpTesting,
+                modifier = Modifier.weight(1f)
+            ) { Text(if (ui.ftpTesting) "Testing…" else "Test FTP") }
+            Button(
+                onClick = onForceUpload,
+                modifier = Modifier.weight(1f)
+            ) { Text("Upload now") }
+        }
+        if (ui.ftpTestResult != null) {
+            val ok = ui.ftpTestResult.startsWith("FTP OK")
+            Text(
+                ui.ftpTestResult,
+                fontSize = 12.sp,
+                color = if (ok) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
         }
 
         LazyColumn(Modifier.fillMaxSize()) {
