@@ -48,6 +48,7 @@ fun SettingsScreen(
     var sensitivity by remember { mutableStateOf(initial.motionSensitivity.toFloat()) }
     var videoRot by remember { mutableStateOf(initial.videoRotationDegrees.toString()) }
     var timeout by remember { mutableStateOf(initial.noMotionTimeoutSec.toString()) }
+    var minMovement by remember { mutableStateOf(initial.minMovementSec.toString()) }
     var maxSize by remember { mutableStateOf(initial.maxFileSizeMb.toString()) }
     var ftpHost by remember { mutableStateOf(initial.ftpHost) }
     var ftpPort by remember { mutableStateOf(initial.ftpPort.toString()) }
@@ -88,6 +89,7 @@ fun SettingsScreen(
         Slider(value = sensitivity, onValueChange = { sensitivity = it }, valueRange = 0f..100f)
         numField("Video rotation deg (0=landscape, 180=flip, 90/270=portrait, -1=auto)", videoRot) { videoRot = it }
         numField("No-motion timeout (sec)", timeout) { timeout = it }
+        numField("Min motion to keep clip (sec, 0 = off)", minMovement) { minMovement = it }
         numField("Max file size (MB)", maxSize) { maxSize = it }
 
         Text("FTP upload", style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
@@ -120,6 +122,7 @@ fun SettingsScreen(
                             motionSensitivity = sensitivity.toInt(),
                             videoRotationDegrees = videoRot.toIntOrNull() ?: s.videoRotationDegrees,
                             noMotionTimeoutSec = timeout.toIntOrNull() ?: s.noMotionTimeoutSec,
+                            minMovementSec = minMovement.toIntOrNull() ?: s.minMovementSec,
                             maxFileSizeMb = maxSize.toIntOrNull() ?: s.maxFileSizeMb,
                             ftpHost = ftpHost.trim(),
                             ftpPort = ftpPort.toIntOrNull() ?: s.ftpPort,

@@ -18,6 +18,10 @@ data class UiState(
     val graceRemainingSec: Int = 0,
     val currentFileName: String? = null,
     val recordingElapsedMs: Long = 0L,
+    // True while an active recording is on track to be DISCARDED at finalisation:
+    // it has passed 75% of the no-motion window without enough cumulative motion.
+    // Drives the red "will be deleted" border around the preview.
+    val willDiscard: Boolean = false,
     val torchMode: TorchMode = TorchMode.OFF,
     val torchOn: Boolean = false,
     val keepScreenMode: KeepScreenMode = KeepScreenMode.OFF,

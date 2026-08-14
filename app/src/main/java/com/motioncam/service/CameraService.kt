@@ -127,6 +127,7 @@ class CameraService : Service(), CameraController.Callbacks {
 
         detector.setSensitivity(settings.current.motionSensitivity)
         stateMachine.setNoMotionTimeout(settings.current.noMotionTimeoutSec * 1000L)
+        stateMachine.setMinMovement(settings.current.minMovementSec * 1000L)
 
         controller = CameraController(this)
         controller.setCallbacks(this)
@@ -178,13 +179,23 @@ class CameraService : Service(), CameraController.Callbacks {
         handleActions(stateMachine.onTick(now), now)
 
         val grace = (stateMachine.graceRemainingMs(now) / 1000).toInt()
-        val elapsed = if (AppState.snapshot().isRecording) now - recordingStartTime else 0L
+        val recording = AppState.snapshot().isRecording
+        val elapsed = if (recording) now - recordingStartTime else 0L
+        // Red "will be deleted" warning: an active clip that has passed 75% of the
+        // (variable) no-motion window without enough cumulative motion is on track to
+        // be discarded at finalisation. minMovementSec == 0 disables the gate.
+        val minMoveMs = settings.current.minMovementSec * 1000L
+        val windowMs = settings.current.noMotionTimeoutSec * 1000L
+        val willDiscard = recording && minMoveMs > 0L &&
+            stateMachine.currentMovementMs(now) < minMoveMs &&
+            elapsed >= (windowMs * 3L) / 4L
         checkWarnings(now)
         AppState.update {
             it.copy(
                 recorderState = stateMachine.state,
                 graceRemainingSec = grace,
                 recordingElapsedMs = elapsed,
+                willDiscard = willDiscard,
                 batteryPercent = batteryPercent
             )
         }
@@ -236,6 +247,7 @@ class CameraService : Service(), CameraController.Callbacks {
         for (action in actions) when (action) {
             RecorderStateMachine.Action.START_RECORDING -> startRecording(now)
             RecorderStateMachine.Action.STOP_RECORDING -> stopRecording()
+            RecorderStateMachine.Action.CANCEL_RECORDING -> cancelRecording()
         }
     }
 
@@ -263,7 +275,20 @@ class CameraService : Service(), CameraController.Callbacks {
         L.i("Rec", "stop recording (state=${stateMachine.state})")
         controller.stopRecording()
         beeper.recordingStopped()
-        AppState.update { it.copy(currentFileName = null, recorderState = stateMachine.state) }
+        AppState.update {
+            it.copy(currentFileName = null, recorderState = stateMachine.state, willDiscard = false)
+        }
+        updateNotification()
+    }
+
+    /** Discard the just-finished clip: it didn't capture enough cumulative motion. */
+    private fun cancelRecording() {
+        L.i("Rec", "cancel recording — below min-movement (state=${stateMachine.state})")
+        controller.cancelRecording()
+        beeper.recordingStopped()
+        AppState.update {
+            it.copy(currentFileName = null, recorderState = stateMachine.state, willDiscard = false)
+        }
         updateNotification()
     }
 
@@ -463,6 +488,7 @@ class CameraService : Service(), CameraController.Callbacks {
         val s = settings.current
         detector.setSensitivity(s.motionSensitivity)
         stateMachine.setNoMotionTimeout(s.noMotionTimeoutSec * 1000L)
+        stateMachine.setMinMovement(s.minMovementSec * 1000L)
     }
 
     // ---- notification ----

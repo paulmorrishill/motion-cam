@@ -26,6 +26,7 @@ object SettingsCodec {
     private const val K_SENS = "motionSensitivity"
     private const val K_VID_ROT = "videoRotationDegrees"
     private const val K_TIMEOUT = "noMotionTimeoutSec"
+    private const val K_MIN_MOVE = "minMovementSec"
     private const val K_MAXSIZE = "maxFileSizeMb"
     private const val K_FTP_HOST = "ftpHost"
     private const val K_FTP_PORT = "ftpPort"
@@ -45,6 +46,7 @@ object SettingsCodec {
         o.put(K_SENS, s.motionSensitivity)
         o.put(K_VID_ROT, s.videoRotationDegrees)
         o.put(K_TIMEOUT, s.noMotionTimeoutSec)
+        o.put(K_MIN_MOVE, s.minMovementSec)
         o.put(K_MAXSIZE, s.maxFileSizeMb)
         o.put(K_FTP_HOST, s.ftpHost)
         o.put(K_FTP_PORT, s.ftpPort)
@@ -81,6 +83,7 @@ object SettingsCodec {
             motionSensitivity = o.optInt(K_SENS, current.motionSensitivity),
             videoRotationDegrees = o.optInt(K_VID_ROT, current.videoRotationDegrees),
             noMotionTimeoutSec = o.optInt(K_TIMEOUT, current.noMotionTimeoutSec),
+            minMovementSec = o.optInt(K_MIN_MOVE, current.minMovementSec),
             maxFileSizeMb = o.optInt(K_MAXSIZE, current.maxFileSizeMb),
             ftpHost = o.optString(K_FTP_HOST, current.ftpHost),
             ftpPort = o.optInt(K_FTP_PORT, current.ftpPort),
