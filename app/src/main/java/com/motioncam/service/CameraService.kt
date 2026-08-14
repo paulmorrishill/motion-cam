@@ -22,6 +22,7 @@ import com.motioncam.motion.MotionDetector
 import com.motioncam.motion.MotionGate
 import com.motioncam.settings.SettingsStore
 import com.motioncam.ui.MainActivity
+import com.motioncam.upload.FtpUploader
 import com.motioncam.upload.UploadManager
 import com.motioncam.util.Beeper
 import com.motioncam.util.Filenames
@@ -127,6 +128,7 @@ class CameraService : Service(), CameraController.Callbacks {
 
         detector.setSensitivity(settings.current.motionSensitivity)
         stateMachine.setNoMotionTimeout(settings.current.noMotionTimeoutSec * 1000L)
+        stateMachine.setMinMovement(settings.current.minMovementSec * 1000L)
 
         controller = CameraController(this)
         controller.setCallbacks(this)
@@ -178,13 +180,23 @@ class CameraService : Service(), CameraController.Callbacks {
         handleActions(stateMachine.onTick(now), now)
 
         val grace = (stateMachine.graceRemainingMs(now) / 1000).toInt()
-        val elapsed = if (AppState.snapshot().isRecording) now - recordingStartTime else 0L
+        val recording = AppState.snapshot().isRecording
+        val elapsed = if (recording) now - recordingStartTime else 0L
+        // Red "will be deleted" warning: an active clip that has passed 75% of the
+        // (variable) no-motion window without enough cumulative motion is on track to
+        // be discarded at finalisation. minMovementSec == 0 disables the gate.
+        val minMoveMs = settings.current.minMovementSec * 1000L
+        val windowMs = settings.current.noMotionTimeoutSec * 1000L
+        val willDiscard = recording && minMoveMs > 0L &&
+            stateMachine.currentMovementMs(now) < minMoveMs &&
+            elapsed >= (windowMs * 3L) / 4L
         checkWarnings(now)
         AppState.update {
             it.copy(
                 recorderState = stateMachine.state,
                 graceRemainingSec = grace,
                 recordingElapsedMs = elapsed,
+                willDiscard = willDiscard,
                 batteryPercent = batteryPercent
             )
         }
@@ -236,6 +248,7 @@ class CameraService : Service(), CameraController.Callbacks {
         for (action in actions) when (action) {
             RecorderStateMachine.Action.START_RECORDING -> startRecording(now)
             RecorderStateMachine.Action.STOP_RECORDING -> stopRecording()
+            RecorderStateMachine.Action.CANCEL_RECORDING -> cancelRecording()
         }
     }
 
@@ -263,7 +276,20 @@ class CameraService : Service(), CameraController.Callbacks {
         L.i("Rec", "stop recording (state=${stateMachine.state})")
         controller.stopRecording()
         beeper.recordingStopped()
-        AppState.update { it.copy(currentFileName = null, recorderState = stateMachine.state) }
+        AppState.update {
+            it.copy(currentFileName = null, recorderState = stateMachine.state, willDiscard = false)
+        }
+        updateNotification()
+    }
+
+    /** Discard the just-finished clip: it didn't capture enough cumulative motion. */
+    private fun cancelRecording() {
+        L.i("Rec", "cancel recording — below min-movement (state=${stateMachine.state})")
+        controller.cancelRecording()
+        beeper.recordingStopped()
+        AppState.update {
+            it.copy(currentFileName = null, recorderState = stateMachine.state, willDiscard = false)
+        }
         updateNotification()
     }
 
@@ -441,6 +467,26 @@ class CameraService : Service(), CameraController.Callbacks {
         analysis.execute { handleActions(stateMachine.onUserRearm(), System.currentTimeMillis()) }
     }
 
+    /** Force an immediate upload pass (also runs retention). Files still need to be
+     *  >5s old and not the active recording to be picked up. */
+    fun triggerUploads() {
+        L.i("Upload", "manual queue trigger")
+        uploads.trigger()
+    }
+
+    /** Test the saved FTP settings without uploading a recording; result -> AppState. */
+    fun testFtp() {
+        AppState.update { it.copy(ftpTesting = true, ftpTestResult = null) }
+        scope.launch {
+            val msg = when (val r = uploads.testConnection()) {
+                is FtpUploader.Result.Success -> "FTP OK — connected and wrote a test file"
+                is FtpUploader.Result.Failure -> "FTP failed: ${r.message}"
+            }
+            L.i("Upload", "FTP test: $msg")
+            AppState.update { it.copy(ftpTesting = false, ftpTestResult = msg) }
+        }
+    }
+
     fun cycleTorch() {
         torchMode = when (torchMode) {
             TorchMode.OFF -> TorchMode.AUTO
@@ -463,6 +509,7 @@ class CameraService : Service(), CameraController.Callbacks {
         val s = settings.current
         detector.setSensitivity(s.motionSensitivity)
         stateMachine.setNoMotionTimeout(s.noMotionTimeoutSec * 1000L)
+        stateMachine.setMinMovement(s.minMovementSec * 1000L)
     }
 
     // ---- notification ----

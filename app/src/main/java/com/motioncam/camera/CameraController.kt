@@ -533,12 +533,23 @@ class CameraController(private val context: Context) {
         cameraHandler.post { finishRecording(interrupted = false) }
     }
 
+    /** Stop recording and DISCARD the file (min-movement gate not met). The file is
+     *  deleted and never delivered to the upload manager. */
+    fun cancelRecording() {
+        cameraHandler.post { finishRecording(interrupted = false, discard = true) }
+    }
+
     /**
      * Tears down the recorder. Delivers the finished file only if it was actually
      * started and is non-empty; deletes empty/aborted files so they are never
      * uploaded. [interrupted] true means an unexpected end (max size reached).
+     * [discard] true deletes the finished file instead of delivering it.
      */
-    private fun finishRecording(interrupted: Boolean, rebuildSession: Boolean = true) {
+    private fun finishRecording(
+        interrupted: Boolean,
+        rebuildSession: Boolean = true,
+        discard: Boolean = false
+    ) {
         if (!recording && !interrupted) return
         recording = false
         pendingRecorderStart = false
@@ -566,7 +577,10 @@ class CameraController(private val context: Context) {
         // camera switch, which is about to release the device entirely.
         if (rebuildSession) createSession()
 
-        if (stoppedCleanly && finished != null && finished.length() > 0L) {
+        if (discard) {
+            // Min-movement gate not met: drop the clip entirely, never upload it.
+            finished?.let { if (it.exists()) it.delete() }
+        } else if (stoppedCleanly && finished != null && finished.length() > 0L) {
             callbacks?.onRecordingFileCompleted(finished)
         } else {
             finished?.let { if (it.exists() && it.length() == 0L) it.delete() }

@@ -32,6 +32,52 @@ class FtpUploader {
     }
 
     /**
+     * Verify the FTP settings without uploading a real recording: connect, log in,
+     * ensure the remote dir exists and confirm it is writable by storing then
+     * deleting a tiny probe file. Returns [Result.Success] if all steps pass.
+     */
+    suspend fun test(config: Config): Result = withContext(Dispatchers.IO) {
+        val ftp = FTPClient()
+        ftp.connectTimeout = 15_000
+        ftp.setDataTimeout(java.time.Duration.ofSeconds(30))
+        try {
+            ftp.connect(config.host, config.port)
+            if (!FTPReply.isPositiveCompletion(ftp.replyCode)) {
+                ftp.disconnect()
+                return@withContext Result.Failure("Connect refused (${ftp.replyCode})")
+            }
+            if (!ftp.login(config.user, config.password)) {
+                ftp.disconnect()
+                return@withContext Result.Failure("Login failed")
+            }
+            ftp.setFileType(FTP.BINARY_FILE_TYPE)
+            ftp.enterLocalPassiveMode()
+            ensureRemoteDir(ftp, config.remoteDir)
+
+            // Write + delete a small probe to prove the directory is writable.
+            val probe = config.remoteDir.trimEnd('/') + "/.motioncam_test"
+            val wrote = "ok".byteInputStream().use { ftp.storeFile(probe, it) }
+            if (!wrote) {
+                return@withContext Result.Failure(
+                    "Cannot write to ${config.remoteDir} (${ftp.replyString?.trim()})"
+                )
+            }
+            ftp.deleteFile(probe)
+            Result.Success
+        } catch (e: Exception) {
+            Result.Failure(e.message ?: e.javaClass.simpleName)
+        } finally {
+            try {
+                if (ftp.isConnected) {
+                    ftp.logout()
+                    ftp.disconnect()
+                }
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    /**
      * @param onProgress called with bytes-transferred as the upload proceeds.
      */
     suspend fun upload(

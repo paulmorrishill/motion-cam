@@ -98,6 +98,24 @@ class FtpUploadInstrumentedTest {
     }
 
     @Test
+    fun testConnection_succeedsWithValidConfig() = runBlocking {
+        val result = FtpUploader().test(
+            FtpUploader.Config("127.0.0.1", port, user, pass, "/incoming")
+        )
+        assertThat(result).isInstanceOf(FtpUploader.Result.Success::class.java)
+        // Probe file must be cleaned up, not left behind.
+        assertThat(fs.exists("/incoming/.motioncam_test")).isFalse()
+    }
+
+    @Test
+    fun testConnection_failsOnWrongPassword() = runBlocking {
+        val result = FtpUploader().test(
+            FtpUploader.Config("127.0.0.1", port, user, "nope", "/incoming")
+        )
+        assertThat(result).isInstanceOf(FtpUploader.Result.Failure::class.java)
+    }
+
+    @Test
     fun createsRemoteDirectoryWhenMissing() = runBlocking {
         val file = tempFileOf(2_000)
         val result = FtpUploader().upload(

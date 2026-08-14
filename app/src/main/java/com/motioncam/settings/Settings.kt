@@ -12,6 +12,9 @@ data class Settings(
     // orientation; 90/270 would be portrait (not normally needed).
     val videoRotationDegrees: Int = -1,
     val noMotionTimeoutSec: Int = 60,
+    // Minimum cumulative seconds of motion a clip must contain or it is discarded
+    // (not saved/uploaded) when the no-motion timeout finalises it. 0 = disabled.
+    val minMovementSec: Int = 4,
     val maxFileSizeMb: Int = 1900,          // ~2GB rollover
     val ftpHost: String = "",
     val ftpPort: Int = 21,

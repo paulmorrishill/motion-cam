@@ -18,6 +18,10 @@ data class UiState(
     val graceRemainingSec: Int = 0,
     val currentFileName: String? = null,
     val recordingElapsedMs: Long = 0L,
+    // True while an active recording is on track to be DISCARDED at finalisation:
+    // it has passed 75% of the no-motion window without enough cumulative motion.
+    // Drives the red "will be deleted" border around the preview.
+    val willDiscard: Boolean = false,
     val torchMode: TorchMode = TorchMode.OFF,
     val torchOn: Boolean = false,
     val keepScreenMode: KeepScreenMode = KeepScreenMode.OFF,
@@ -41,7 +45,11 @@ data class UiState(
     val scanning: Boolean = false,
     val scannedConfig: String? = null,
     val uploadQueue: List<UploadItem> = emptyList(),
-    val recentFiles: List<RecentFile> = emptyList()
+    val recentFiles: List<RecentFile> = emptyList(),
+    // FTP connection test (from the Uploads screen button): true while probing;
+    // ftpTestResult holds the last human-readable outcome until dismissed/re-run.
+    val ftpTesting: Boolean = false,
+    val ftpTestResult: String? = null
 ) {
     /** Human-readable status shown at the top of the recording screen. */
     val statusText: String

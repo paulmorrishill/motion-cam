@@ -2,6 +2,7 @@ package com.motioncam.ui
 
 import android.view.WindowManager
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -135,7 +136,14 @@ fun MotionCamRoot(serviceProvider: () -> CameraService?, activity: MainActivity)
             Screen.UPLOADS -> Surface(
                 Modifier.fillMaxSize(),
                 color = MaterialTheme.colorScheme.background
-            ) { UploadsScreen(ui = ui, onBack = { screen = Screen.MAIN }) }
+            ) {
+                UploadsScreen(
+                    ui = ui,
+                    onBack = { screen = Screen.MAIN },
+                    onTestFtp = { service?.testFtp() },
+                    onForceUpload = { service?.triggerUploads() }
+                )
+            }
             // Transparent overlay over the live preview so the user can aim at the QR.
             Screen.SCAN -> ScanOverlay(onCancel = {
                 service?.cancelConfigScan()
@@ -260,6 +268,13 @@ private fun MainScreen(
             onZoom = { factor -> service?.zoomBy(factor) },
             modifier = Modifier.fillMaxSize()
         )
+
+        // Red border: this clip has passed 75% of the no-motion window without enough
+        // cumulative motion, so it is on track to be discarded (not saved) at finalise.
+        // Purely decorative overlay — no pointerInput, so it never intercepts taps.
+        if (ui.willDiscard) {
+            Box(Modifier.fillMaxSize().border(6.dp, Color.Red))
+        }
 
         // Top status + warning banners.
         Column(
