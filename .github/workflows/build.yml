@@ -59,6 +59,12 @@ jobs:
         with:
           name: apks
           path: dist/*.apk
+          # Transport to the `release` job, which puts main builds on the
+          # `latest` release (release files do not use artifact storage). 3 days
+          # leaves time to install a PR build. With no retention set, the repo
+          # default of 90 days kept every build: 39 APK sets, 1 GB, in one
+          # account-wide quota that blocked uploads in other repos too.
+          retention-days: 3
 
       - name: Upload unit test report
         if: always()
@@ -66,6 +72,7 @@ jobs:
         with:
           name: unit-test-report
           path: app/build/reports/tests/testDebugUnitTest
+          retention-days: 7
 
   instrumented:
     name: Instrumented tests (emulator)
@@ -113,6 +120,7 @@ jobs:
           name: ui-screenshot
           path: screenshots/**/*.png
           if-no-files-found: ignore
+          retention-days: 7
 
       - name: Upload instrumented test report
         if: always()
@@ -120,6 +128,7 @@ jobs:
         with:
           name: instrumented-test-report
           path: app/build/reports/androidTests/connected
+          retention-days: 7
 
   release:
     name: Publish APK release
